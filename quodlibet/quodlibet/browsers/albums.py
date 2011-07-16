@@ -19,7 +19,6 @@ from quodlibet import util
 from quodlibet import stock
 
 from quodlibet.browsers._base import Browser
-from quodlibet.browsers.search import BoxSearchBar
 from quodlibet.parse import Query, XMLFromPattern
 from quodlibet.qltk.ccb import ConfigCheckButton
 from quodlibet.qltk.completion import EntryWordCompletion
@@ -27,7 +26,8 @@ from quodlibet.qltk.songsmenu import SongsMenu
 from quodlibet.qltk.textedit import PatternEditBox
 from quodlibet.qltk.views import AllTreeView
 from quodlibet.qltk.x import MenuItem
-from quodlibet.util import copool, gobject_weak
+from quodlibet.qltk.searchbar import SearchBarBox
+from quodlibet.util import copool, gobject_weak, thumbnails
 from quodlibet.util.library import background_filter
 
 EMPTY = _("Songs not in an album")
@@ -162,13 +162,14 @@ class AlbumList(Browser, gtk.VBox, util.InstanceTracker):
         except EnvironmentError:
             klass._pattern_text = PATTERN
 
-        no_cover = os.path.join(const.IMAGEDIR, stock.NO_COVER)
+        theme = gtk.icon_theme_get_default()
         try:
-            klass.__no_cover = gtk.gdk.pixbuf_new_from_file_at_size(
-                no_cover + ".svg", 48, 48)
-        except gobject.GError:
-            klass.__no_cover = gtk.gdk.pixbuf_new_from_file_at_size(
-                no_cover + ".png", 48, 48)
+            klass.__no_cover = theme.load_icon(
+                "quodlibet-missing-cover", 48, 0)
+        except gobject.GError: pass
+        else:
+            klass.__no_cover = thumbnails.scale(
+                klass.__no_cover, (48, 48))
 
         klass._pattern = XMLFromPattern(klass._pattern_text)
 
@@ -243,19 +244,6 @@ class AlbumList(Browser, gtk.VBox, util.InstanceTracker):
                 changed_albums.remove(row[0])
                 model.row_changed(row.path, row.iter)
                 if not changed_albums: break
-
-    class FilterBar(BoxSearchBar):
-        """The search filter entry HBox, modifiedto toggle between the search
-        bar and album list on mnemonic activation."""
-        def __init__(self, albumlist, *args, **kwargs):
-            super(AlbumList.FilterBar, self).__init__(*args, **kwargs)
-            self.albumlist = albumlist
-
-        def _mnemonic_activate(self, label, group_cycling):
-            widget = label.get_mnemonic_widget()
-            if widget.is_focus():
-                self.albumlist.view.grab_focus()
-                return True
 
     class SortCombo(gtk.ComboBox):
         """ComboBox which sets the sort function on a TreeModelSort."""
@@ -400,7 +388,7 @@ class AlbumList(Browser, gtk.VBox, util.InstanceTracker):
                 self.__play_selection, player)
 
         self.__sig = gobject_weak(view.get_selection().connect, 'changed',
-            self.__selection_changed, parent=view)
+            util.DeferredSignal(self.__update_songs), parent=view)
 
         targets = [("text/x-quodlibet-songs", gtk.TARGET_SAME_APP, 1),
                    ("text/uri-list", 0, 2)]
@@ -410,9 +398,10 @@ class AlbumList(Browser, gtk.VBox, util.InstanceTracker):
         gobject_weak(view.connect_object, 'popup-menu',
             self.__popup, view, library)
 
-        search = AlbumList.FilterBar(
-                self, library, button=False, completion=AlbumTagCompletion())
-        search.callback = self.__update_filter
+        search = SearchBarBox(button=False, completion=AlbumTagCompletion())
+        search.connect('query-changed', self.__update_filter)
+        search.connect_object('focus-out', lambda w: w.grab_focus(), view)
+
         prefs = gtk.Button()
         prefs.add(gtk.image_new_from_stock(
             gtk.STOCK_PREFERENCES, gtk.ICON_SIZE_MENU))
@@ -517,15 +506,14 @@ class AlbumList(Browser, gtk.VBox, util.InstanceTracker):
         self.__scan_timeout = gobject.timeout_add(
             50, self.__update_visible_covers, view)
 
-    def __update_filter(self, text):
+    def __update_filter(self, entry, text):
         #This could be called after the browsers is already closed
         if not self.view.get_selection(): return
         model = self.view.get_model()
-        if Query.is_parsable(text):
-            if not text:
-                self.__filter = None
-            else:
-                self.__filter = Query(text, star=["~people", "album"]).search
+        if not text:
+            self.__filter = None
+        else:
+            self.__filter = Query(text, star=["~people", "album"]).search
         self.__bg_filter = background_filter()
         self.__inhibit()
         # We could be smart and try to scroll to a selected album
@@ -627,18 +615,20 @@ class AlbumList(Browser, gtk.VBox, util.InstanceTracker):
         assert(key == "album")
         if not values: values = [""]
         view = self.view
+        self.__inhibit()
         selection = view.get_selection()
         selection.unselect_all()
         model = view.get_model()
-        first = None
+        first = True
         for row in model:
             if row[0] is not None and row[0].title in values:
                 selection.select_path(row.path)
-                if first is None:
-                    view.set_cursor(row.path)
-                    first = row.path[0]
-        if first:
-            view.scroll_to_cell(first, use_align=True, row_align=0.5)
+                if first:
+                    view.scroll_to_cell(row.path[0],
+                        use_align=True, row_align=0.5)
+                    first = False
+        self.__uninhibit()
+        selection.emit('changed')
 
     def unfilter(self):
         selection = self.view.get_selection()
@@ -696,12 +686,6 @@ class AlbumList(Browser, gtk.VBox, util.InstanceTracker):
                 sel.select_path(row.path[0])
                 break
 
-    def __selection_changed(self, selection):
-        # Without this delay, GTK+ seems to sometimes call this function
-        # before model elements are totally filled in, leading to errors
-        # like "TypeError: unknown type (null)".
-        gobject.idle_add(self.__update_songs, selection.get_tree_view())
-
     def __get_config_string(self, selection):
         if not selection: return ""
         model, rows = selection.get_selected_rows()
@@ -719,9 +703,8 @@ class AlbumList(Browser, gtk.VBox, util.InstanceTracker):
             confval = "\n" + confval[:-1]
         return confval
 
-    def __update_songs(self, view):
+    def __update_songs(self, selection):
         if not self.__dict__: return
-        selection = view.get_selection()
         songs = self.__get_selected_songs(selection, False)
         self.emit('songs-selected', songs, None)
         if self.__save:

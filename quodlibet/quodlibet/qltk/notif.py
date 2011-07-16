@@ -179,7 +179,7 @@ class TaskController(object):
     def desc(self):
         if len(self.active_tasks) == 1:
             return self.active_tasks[0].desc
-        self.desc = _("%d tasks running") % len(self.active_tasks)
+        return _("%d tasks running") % len(self.active_tasks)
 
     @property
     def frac(self):
@@ -253,7 +253,8 @@ class TaskWidget(gtk.HBox):
             self.task.stop()
 
     def update(self):
-        formatted_label = "<b>%s</b>\n%s" % (self.task.source, self.task.desc)
+        formatted_label = "<small><b>%s</b>\n%s</small>" % (self.task.source,
+            self.task.desc)
         self.label.set_markup(formatted_label)
         if self.task.frac is not None:
             self.progress.set_fraction(self.task.frac)

@@ -242,19 +242,19 @@ def format_size(size):
     """Turn an integer size value into something human-readable."""
     # TODO: Better i18n of this (eg use O/KO/MO/GO in French)
     if size >= 1024*1024*1024:
-        return "%.1fGB" % (float(size) / (1024*1024*1024))
+        return "%.1f GB" % (float(size) / (1024*1024*1024))
     elif size >= 1024*1024 * 100:
-        return "%.0fMB" % (float(size) / (1024*1024))
+        return "%.0f MB" % (float(size) / (1024*1024))
     elif size >= 1024*1024 * 10:
-        return "%.1fMB" % (float(size) / (1024*1024))
+        return "%.1f MB" % (float(size) / (1024*1024))
     elif size >= 1024*1024:
-        return "%.2fMB" % (float(size) / (1024*1024))
+        return "%.2f MB" % (float(size) / (1024*1024))
     elif size >= 1024 * 10:
-        return "%dKB" % int(size / 1024)
+        return "%d KB" % int(size / 1024)
     elif size >= 1024:
-        return "%.2fKB" % (float(size) / 1024)
+        return "%.2f KB" % (float(size) / 1024)
     else:
-        return "%dB" % size
+        return "%d B" % size
 
 def format_time(time):
     """Turn a time value in seconds into hh:mm:ss or mm:ss."""
@@ -663,3 +663,14 @@ if os.name == "nt":
     pathname2url = pathname2url_win32
 else:
     pathname2url = urllib.pathname2url
+
+
+# See http://stackoverflow.com/questions/1151658/python-hashable-dicts
+class HashableDict(dict):
+    """Standard dict, made hashable. Useful for making sets of dicts etc"""
+    def __key(self):
+        return tuple((k,self[k]) for k in sorted(self))
+    def __hash__(self):
+        return hash(self.__key())
+    def __eq__(self, other):
+        return self.__key() == other.__key()

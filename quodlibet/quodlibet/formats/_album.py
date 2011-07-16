@@ -26,6 +26,7 @@ NUM_DEFAULT_FUNCS = {
     "rating": "avg",
     "skipcount": "sum",
     "year": "min",
+    "filesize": "sum"
 }
 
 NUM_FUNCS = {
@@ -216,6 +217,10 @@ class Collection(object):
                 return util.format_rating(rating)
             elif key == "cover":
                 return ((self.cover != type(self).cover) and "y") or None
+            elif key == "filesize":
+                size = self.__get_value("~#filesize")
+                if size is None: return None
+                return util.format_size(size)
             key = "~" + key
 
         #Nothing special was found, so just take all values of the songs

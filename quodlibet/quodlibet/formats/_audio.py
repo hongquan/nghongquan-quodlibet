@@ -13,15 +13,20 @@ import stat
 import glob
 import shutil
 import time
+import re
 
 from quodlibet import const
 from quodlibet import util
+from quodlibet import config
+from ConfigParser import NoSectionError, NoOptionError
 
 from quodlibet.util.uri import URI
+from quodlibet.util import HashableDict
 from quodlibet.util import human_sort_key as human
 from quodlibet.util.tags import STANDARD_TAGS as USEFUL_TAGS
 from quodlibet.util.tags import MACHINE_TAGS
 from quodlibet.util.titlecase import title
+
 
 MIGRATE = frozenset(("~#playcount ~#laststarted ~#lastplayed ~#added "
            "~#skipcount ~#rating ~bookmark").split())
@@ -43,6 +48,15 @@ INTERN_NUM_DEFAULT = frozenset("~#lastplayed ~#laststarted ~#playcount "
 SORT_TO_TAG = dict([(v, k) for (k, v) in TAG_TO_SORT.iteritems()])
 
 PEOPLE_SORT = [TAG_TO_SORT.get(k, k) for k in PEOPLE]
+
+# tags that should alone identify an album, ordered by descending preference
+UNIQUE_ALBUM_IDENTIFIERS = ["musicbrainz_albumid", "labelid"]
+
+def cfg_getboolean(section, key, default=False):
+    try:
+        return config.getboolean(section, key)
+    except (NoSectionError, NoOptionError):
+        return default
 
 class AudioFile(dict):
     """An audio file. It looks like a dict, but implements synthetic
@@ -117,6 +131,33 @@ class AudioFile(dict):
                 self.get("musicbrainz_albumid") or "")
     album_key = property(__album_key)
 
+    def _album_id_values(self, use_artist=False):
+        """Returns a "best attempt" conjunction (=AND) of album identifiers
+
+        Tries the (probably) most specific keys first, then gets less accurate
+        but more verbose (eg artist="foo" AND album="bar").
+        
+        if use_artist is True, the track artist will also be used as a key if
+        necessary. This breaks compilations, but does well for overloaded
+        album names (eg "Greatest Hits")
+        """
+        ret = HashableDict()
+        for key in UNIQUE_ALBUM_IDENTIFIERS:
+            val = self.get(key)
+            if val: 
+                ret[key] = val
+                break
+        if not ret and "album" in self:
+            # Add helpful identifiers where they exist
+            for key in ["album", "albumartist", "album_grouping_key"]:
+                val = self.get(key)
+                if val: ret[key] = val
+            if use_artist and "albumartist" not in ret and "artist" in self: 
+                ret["artist"] = self.get("artist")
+        return ret
+
+    album_id_values = property(_album_id_values)
+
     def __cmp__(self, other):
         if not other: return -1
         try: return cmp(self.sort_key, other.sort_key)
@@ -132,6 +173,9 @@ class AudioFile(dict):
     def __eq__(self, other):
         # And to preserve Python hash rules, we need a strict __eq__.
         return self is other
+
+    def __ne__(self, other):
+        return self is not other
 
     def reload(self):
         """Reload an audio file from disk. The caller is responsible for
@@ -439,6 +483,15 @@ class AudioFile(dict):
             stat = os.stat(self['~filename'])
             self["~#mtime"] = stat.st_mtime
             self["~#filesize"] = stat.st_size
+
+            # Issue 342. This is a horrible approximation (due to headers)
+            # ...but on FLACs, the most common case, this should be close enough
+            if "~#bitrate" not in self:
+                try:
+                    # kbps = bytes * 8 / seconds / 1000
+                    self["~#bitrate"] = int(stat.st_size /
+                        (self["~#length"] * (1000/8)))
+                except (KeyError, ZeroDivisionError): pass
         except OSError:
             self["~#mtime"] = 0
 
@@ -464,6 +517,23 @@ class AudioFile(dict):
         s.append("~format=%s" % self.format)
         s.append("")
         return "\n".join(s)
+
+    def from_dump(self, text):
+        """Parses the text created with to_dump and adds the found tags."""
+        for line in text.split("\n"):
+            if not line: continue
+            parts = line.split("=")
+            key = parts[0]
+            val = "=".join(parts[1:])
+            if key == "~format":
+                pass
+            elif key.startswith("~#"):
+                try: self.add(key, int(val))
+                except ValueError:
+                    try: self.add(key, float(val))
+                    except ValueError: pass
+            else:
+                self.add(key, val)
 
     def change(self, key, old_value, new_value):
         """Change 'old_value' to 'new_value' for the given metadata key.
@@ -500,57 +570,87 @@ class AudioFile(dict):
         ["scan", "scans", "images", "covers", "artwork"])
     __cover_exts = frozenset(["jpg", "jpeg", "png", "gif"])
 
-    __cover_score = ("front", "cover", "jacket",
-        "folder", "albumart", "edited")
+    __cover_positive = frozenset(["front", "cover", "jacket",
+        "folder", "albumart", "edited"])
+    __cover_negative_regexes = frozenset(
+        map(lambda s:re.compile(r'(\b|_)' + s + r'(\b|_)'),
+            ["back", "inlay", "inset", "inside"]))
 
     def find_cover(self):
         """Return a file-like containing cover image data, or None if
         no cover is available."""
-
         if not self.is_file: return
 
+        # If preferred, check for picture stored in the metadata...
+        if (cfg_getboolean("albumart", "prefer_embedded", False) and
+                "~picture" in self):
+            print_d("Preferring embedded art for %s" % self("~filename"))
+            return self.get_format_cover()
+
         base = self('~dirname')
-        get_ext = lambda s: os.path.splitext(s)[1].lstrip('.')
-
-        entries = []
-        try: entries = os.listdir(base)
-        except EnvironmentError: pass
-
-        fns = []
-        for entry in entries:
-            lentry = entry.lower()
-            if get_ext(lentry) in self.__cover_exts:
-                fns.append((None, entry))
-            if lentry in self.__cover_subdirs:
-                subdir = os.path.join(base, entry)
-                sub_entries = []
-                try: sub_entries = os.listdir(subdir)
-                except EnvironmentError: pass
-                for sub_entry in sub_entries:
-                    lsub_entry = sub_entry.lower()
-                    if get_ext(lsub_entry) in self.__cover_exts:
-                        fns.append((entry, sub_entry))
-
         images = []
-        for sub, fn in fns:
-            score = 0
-            lfn = fn.lower()
-            # check for the album label number
-            if "labelid" in self and self["labelid"].lower() in lfn:
-                score += 100
-            score += sum(map(lfn.__contains__, self.__cover_score))
-            if score:
-                if sub is not None:
-                    fn = os.path.join(sub, fn)
-                images.append((score, os.path.join(base, fn)))
-        images.sort(reverse=True)
+
+        # Issue 374: Specify artwork filename
+        if cfg_getboolean("albumart", "force_filename", False):
+            path = os.path.join(base, config.get("albumart", "filename"))
+            if os.path.isfile(path):
+                images = [(100, path)]
+        else:
+            get_ext = lambda s: os.path.splitext(s)[1].lstrip('.')
+
+            entries = []
+            try: entries = os.listdir(base)
+            except EnvironmentError: pass
+
+            fns = []
+            for entry in entries:
+                lentry = entry.lower()
+                if get_ext(lentry) in self.__cover_exts:
+                    fns.append((None, entry))
+                if lentry in self.__cover_subdirs:
+                    subdir = os.path.join(base, entry)
+                    sub_entries = []
+                    try: sub_entries = os.listdir(subdir)
+                    except EnvironmentError: pass
+                    for sub_entry in sub_entries:
+                        lsub_entry = sub_entry.lower()
+                        if get_ext(lsub_entry) in self.__cover_exts:
+                            fns.append((entry, sub_entry))
+
+            for sub, fn in fns:
+                score = 0
+                lfn = fn.lower()
+                # check for the album label number
+                if "labelid" in self and self["labelid"].lower() in lfn:
+                    score += 20
+
+                # Track-related keywords
+                keywords =  [k.lower().strip() for k in [self("artist"),
+                    self("albumartist"), self("album")] if len(k) > 1]
+                score += 2 * sum(map(lfn.__contains__, keywords))
+
+                # Generic keywords
+                score += 3 * sum(map(lfn.__contains__, self.__cover_positive))
+
+                # Negatives are word-boundary-wrapped
+                # This avoids problems like "Nickelback - front"
+                negs = sum(r.search(lfn) is not None
+                           for r in self.__cover_negative_regexes)
+                score -= 2 * negs
+                #print("[%s - %s]: Album art \"%s\" scores %d (%s neg)." % (
+                #        self("artist"), self("title"), fn, score, negs))
+                if score > 0:
+                    if sub is not None:
+                        fn = os.path.join(sub, fn)
+                    images.append((score, os.path.join(base, fn)))
+            images.sort(reverse=True)
 
         for score, path in images:
             # could be a directory
             if not os.path.isfile(path):
                 continue
             try: return file(path, "rb")
-            except IOError: pass
+            except IOError: print_w(_("Failed reading album art \"%s\"") % path)
 
         if "~picture" in self:
             # Otherwise, we might have a picture stored in the metadata...

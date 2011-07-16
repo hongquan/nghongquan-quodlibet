@@ -273,29 +273,53 @@ class TrayIcon(EventPlugin):
         if sys.platform == "win32":
             pixbuf_size = self.__size
 
-        filename = os.path.join(const.IMAGEDIR, "quodlibet.")
-
         if not self.__pixbuf:
+            try:
+                self.__pixbuf = self.__icon_theme.load_icon(
+                    "quodlibet", pixbuf_size, 0)
+            except gobject.GError: pass
+            else:
+                if self.__pixbuf.props.width != self.__pixbuf.props.height != \
+                    pixbuf_size:
+                    self.__pixbuf = self.__pixbuf.scale_simple(
+                        pixbuf_size, pixbuf_size, gtk.gdk.INTERP_BILINEAR)
+
+        # images got moved into the theme dir after 2.3
+        if not self.__pixbuf:
+            filename = os.path.join(const.IMAGEDIR, "quodlibet.")
             try:
                 self.__pixbuf = gtk.gdk.pixbuf_new_from_file_at_size(
                     filename + "svg", pixbuf_size * 2, pixbuf_size * 2)
             except gobject.GError:
-                self.__pixbuf = gtk.gdk.pixbuf_new_from_file(filename + "png")
-            self.__pixbuf = self.__pixbuf.scale_simple(
-                pixbuf_size, pixbuf_size, gtk.gdk.INTERP_BILINEAR)
+                try:
+                    self.__pixbuf = gtk.gdk.pixbuf_new_from_file(
+                        filename + "png")
+                except gobject.GError:
+                    pass
+            if self.__pixbuf:
+                self.__pixbuf = self.__pixbuf.scale_simple(
+                    pixbuf_size, pixbuf_size, gtk.gdk.INTERP_BILINEAR)
 
         if player.paused:
             if not self.__pixbuf_paused:
                 overlay = None
                 # basic Kubuntu 10.10 has got no gtk.STOCK_MEDIA_PAUSE
+                theme = self.__icon_theme
                 icon_names = (gtk.STOCK_MEDIA_PAUSE, 'media-playback-pause')
                 for name in icon_names:
-                    icon_info = self.__icon_theme.lookup_icon(
-                        name, pixbuf_size, 0)
+                    icon_info = theme.lookup_icon(name, pixbuf_size, 0)
                     if icon_info is not None:
                         try: overlay = icon_info.load_icon()
                         except gobject.GError: pass
                         else: break
+
+                # everything failed, fall back to builtin
+                if overlay is None:
+                    try:
+                        overlay = theme.lookup_icon(gtk.STOCK_MEDIA_PAUSE,
+                            pixbuf_size, gtk.ICON_LOOKUP_USE_BUILTIN
+                            ).load_icon()
+                    except gobject.GError: pass
 
                 if overlay is not None:
                     base = self.__pixbuf.copy()

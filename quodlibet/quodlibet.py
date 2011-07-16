@@ -21,7 +21,10 @@ from quodlibet import config
 from quodlibet import const
 from quodlibet import util
 from quodlibet.util.uri import URI
+# Stops IDEs moaning
+from quodlibet import print_d, print_w, print_e, print_, set_process_title
 
+import gobject
 from threading import Thread
 
 global play
@@ -33,7 +36,7 @@ def main():
     try:
         backend, library, player = quodlibet.init(
             backend=config.get("player", "backend"),
-            library=const.LIBRARY,
+            library=const.LIBRARY, icon="quodlibet",
             )
     except quodlibet.player.error, error:
         import gobject
@@ -97,28 +100,27 @@ def print_playing(fstring="<artist~album~tracknumber~title>"):
     from quodlibet.parse import Pattern
 
     try:
-        fn = file(const.CURRENT)
-        data = {}
-        for line in fn:
-            line = line.strip()
-            parts = line.split("=")
-            key = parts[0]
-            val = "=".join(parts[1:])
-            if key.startswith("~#"):
-                try: data[key] = int(val)
-                except ValueError:
-                    try: data[key] = float(val)
-                    except ValueError: data[key] = 0
-            else:
-                if key != "~filename": val = util.decode(val)
-                else: val = util.decode(util.fsencode(val))
-                if key in data: data[key] += "\n" + val
-                else: data[key] = val
-        print_(Pattern(fstring).format(AudioFile(data)))
+        text = open(const.CURRENT, "rb").read()
+        song = AudioFile()
+        song.from_dump(text)
+        print_(Pattern(fstring).format(song))
         raise SystemExit
     except (OSError, IOError):
         print_(_("No song is currently playing."))
         raise SystemExit(True)
+
+def print_query(query):
+    '''Queries library, dumping filenames of matches to stdout
+
+        See Issue 716
+    '''
+    print_d("Querying library for %r" %query)
+    import quodlibet.library
+    library = quodlibet.library.init(const.LIBRARY, verbose=False)
+    songs = library.query(query)
+    #songs.sort()
+    sys.stdout.write("\n".join([song("~filename") for song in songs]) + "\n")
+    raise SystemExit
 
 def isrunning():
     return os.path.exists(const.CONTROL)
@@ -173,7 +175,7 @@ def process_arguments():
     options = util.OptionParser(
         "Quod Libet", const.VERSION,
         _("a music library and player"),
-        _("[ --print-playing | control ]"))
+        _("[option]"))
 
     options.add("print-playing", help=_("Print the playing song and exit"))
     options.add("start-playing", help=_("Begin playing immediately"))
@@ -201,7 +203,7 @@ def process_arguments():
     for opt, help, arg in [
         ("seek", _("Seek within the playing song"), _("[+|-][HH:]MM:SS")),
         ("order", _("Set or toggle the playback order"),
-         "[order]|toggle"),
+            "[order]|toggle"),
         ("repeat", _("Turn repeat off, on, or toggle it"), "0|1|t"),
         ("volume", _("Set the volume"), "(+|-|)0..100"),
         ("query", _("Search your audio library"), _("query")),
@@ -213,10 +215,14 @@ def process_arguments():
         ("song-list", _("Show or hide the main song list"), "on|off|t"),
         ("random", _("Filter on a random value"), Q_("command|tag")),
         ("filter", _("Filter on a tag value"), _("tag=value")),
-        ("enqueue", _("Enqueue a file or query"), "%s|%s" %(
-        Q_("command|filename"), _("query"))),
-        ("unqueue", _("Unqueue a file or query"), "%s|%s" %(
-        Q_("command|filename"), _("query"))),
+        ("enqueue", _("Enqueue a file or query"), "%s|%s" % (
+            Q_("command|filename"), _("query"))),
+        ("enqueue-files", _("Enqueue comma-separated files"), "%s[,%s..]" % (
+            _("filename"), _("filename"))),
+        ("print-query", _("Print filenames of results of query to stdout"), 
+            _("query")),
+        ("unqueue", _("Unqueue a file or query"), "%s|%s" % (
+            Q_("command|filename"), _("query"))),
         ]: options.add(opt, help=help, arg=arg)
 
     options.add("sm-config-prefix", arg="dummy")
@@ -249,7 +255,6 @@ def process_arguments():
         }
 
     opts, args = options.parse()
-
     for command, arg in opts.items():
         if command in controls: control(command)
         elif command in controls_opt:
@@ -269,6 +274,8 @@ def process_arguments():
             except ValueError:
                 filename = arg
             control(command + " " + filename)
+        elif command == "enqueue-files":
+            control(command + " " + arg)
         elif command == "play-file":
             try:
                 filename = URI(arg).filename
@@ -279,12 +286,17 @@ def process_arguments():
         elif command == "print-playing":
             try: print_playing(args[0])
             except IndexError: print_playing()
+        elif command == "print-query":
+            print_query(arg)
         elif command == "start-playing":
             global play
             play = True
 
 if __name__ == "__main__":
     process_arguments()
+    # Issue 736 - only run when idle, or gtk resets title
+    if os.name != "nt":
+        gobject.idle_add(set_process_title, const.PROCESS_TITLE_QL)
     if isrunning() and not os.environ.get("QUODLIBET_DEBUG"):
         print_(_("Quod Libet is already running."))
         control('focus')

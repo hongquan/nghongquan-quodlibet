@@ -3,7 +3,7 @@ from tests import TestCase, add
 import os
 
 from quodlibet import config
-
+from quodlibet.util import HashableDict
 from quodlibet.formats._audio import AudioFile
 from quodlibet.formats._audio import INTERN_NUM_DEFAULT
 
@@ -230,11 +230,19 @@ class TAudioFile(TestCase):
         for key in INTERN_NUM_DEFAULT:
             self.failUnless(key in dump)
 
+        n = AudioFile()
+        n.from_dump(dump)
+        self.failUnless(set(dump.split("\n")) == set(n.to_dump().split("\n")))
+
     def test_to_dump_long(self):
         b = AudioFile(bar_1_1); b["~#length"] = 200000000000L
         dump = b.to_dump()
         num = len(set(bar_1_1.keys()) | INTERN_NUM_DEFAULT)
         self.failUnlessEqual(dump.count("\n"), num + 2)
+
+        n = AudioFile()
+        n.from_dump(dump)
+        self.failUnless(set(dump.split("\n")) == set(n.to_dump().split("\n")))
 
     def test_add(self):
         song = AudioFile()
@@ -322,11 +330,53 @@ class TAudioFile(TestCase):
             ({'album': 'foo', 'labelid': 'bar', 'musicbrainz_albumid': 'quux'},
                 (('foo',), 'bar'))
             ]
-
         for tags, expected in album_key_tests:
             afile = AudioFile(**tags)
             afile.sanitize('/dir/fn')
             self.failUnlessEqual(afile.album_key, expected)
+
+    def test_album_id_values(self):
+        album_key_tests = [
+            ({}, {}),
+            ({'album': 'foo'}, None),
+            ({'labelid': 'foo'}, None),
+            ({'musicbrainz_albumid': 'foo'}, None),
+            ({'album': 'foo', 'labelid': 'bar'}, {'labelid': 'bar'}),
+            # Musicbrainz is our current "favourite" tag
+            ({'album': 'foo', 'labelid': 'bar', 'musicbrainz_albumid': 'quux'},
+                    {'musicbrainz_albumid': 'quux'}),
+            # albumartist > album in this case
+            ({'album': 'foo', 'albumartist': 'bar', 'artist': 'baz'},
+                    {'album': 'foo', 'albumartist': 'bar'}),
+            # Fail as there's nothing to specify the album
+            ({'albumartist': 'bar', 'artist': 'baz', 'title': 'foo'}, {})
+            ]
+        for tags, expected in album_key_tests:
+            if expected is None: expected = tags
+            afile = AudioFile(**tags)
+            afile.sanitize('/dir/fn')
+            self.failUnlessEqual(afile.album_id_values, HashableDict(expected))
+
+    def test_album_id_values_with_artist(self):
+        album_key_tests = [
+            # The artist should now appear
+            ({'album': 'foo', 'artist': 'bar', 'title': 'baz'},
+                    {'album': 'foo', 'artist': 'bar'}),
+            # But albumartist > album still
+            ({'album': 'foo', 'albumartist': 'bar', 'artist': 'baz'},
+                    {'album': 'foo', 'albumartist': 'bar'}),
+            ]
+        for tags, expected in album_key_tests:
+            if expected is None: expected = tags
+            afile = AudioFile(**tags)
+            afile.sanitize('/dir/fn')
+            # Use alternate version, that includes artist in dict
+            self.failUnlessEqual(afile._album_id_values(True),
+                                 HashableDict(expected))
+
+    def test_eq_ne(self):
+        self.failIf(AudioFile({"a": "b"}) == AudioFile({"a": "b"}))
+        self.failUnless(AudioFile({"a": "b"}) != AudioFile({"a": "b"}))
 
     def tearDown(self):
         os.unlink(quux["~filename"])
@@ -396,11 +446,15 @@ add(Treplay_gain)
 # various files.
 class Tfind_cover(TestCase):
     def setUp(self):
+        config.init()
         self.dir = os.path.realpath(quux("~dirname"))
-        self.files = [os.path.join(self.dir, "12345.jpg"),
-                      os.path.join(self.dir, "nothing.jpg")
+        self.files = [self.full_path("12345.jpg"),
+                      self.full_path("nothing.jpg")
                       ]
         for f in self.files: file(f, "w").close()
+
+    def full_path(self, path):
+        return os.path.join(self.dir, path)
 
     def test_dir_not_exist(self):
         self.failIf(bar_2_1.find_cover())
@@ -411,7 +465,7 @@ class Tfind_cover(TestCase):
     def test_labelid(self):
         quux["labelid"] = "12345"
         self.failUnlessEqual(os.path.abspath(quux.find_cover().name),
-                             os.path.join(self.dir, "12345.jpg"))
+                             self.full_path("12345.jpg"))
         del(quux["labelid"])
 
     def test_regular(self):
@@ -424,6 +478,25 @@ class Tfind_cover(TestCase):
             self.failUnlessEqual(os.path.abspath(quux.find_cover().name), f)
         self.test_labelid() # labelid must work with other files present
 
+    def test_intelligent(self):
+        song = quux
+        song["artist"] = "Q-Man"
+        song["title"] = "First Q falls hardest"
+        files = [self.full_path(f) for f in
+                 ["Quuxly - back.jpg", "Quuxly.jpg", "q-man - quxxly.jpg",
+                  "folder.jpeg", "Q-man - Quuxly (FRONT).jpg"]]
+        for f in files:
+            file(f, "w").close()
+            self.files.append(f)
+            cover = song.find_cover()
+            if cover:
+                actual = os.path.abspath(cover.name)
+                self.failUnlessEqual(actual, f)
+            else:
+                # Here, no cover is better than the back...
+                self.failUnlessEqual(f, self.full_path("Quuxly - back.jpg"))
+
     def tearDown(self):
         map(os.unlink, self.files)
+        config.quit()
 add(Tfind_cover)

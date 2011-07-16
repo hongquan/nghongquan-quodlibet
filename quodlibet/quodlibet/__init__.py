@@ -41,12 +41,15 @@ def _gtk_init(icon=None):
 
     gobject.set_application_name(_("Quod Libet").encode('utf-8'))
     os.environ["PULSE_PROP_media.role"] = "music"
-    os.environ["PULSE_PROP_application.icon_name"] = quodlibet.stock.QL_ICON
+    os.environ["PULSE_PROP_application.icon_name"] = "quodlibet"
 
     if icon:
-        icon = os.path.join(quodlibet.const.IMAGEDIR, icon)
-        try: gtk.window_set_default_icon_from_file(icon + ".svg")
-        except: gtk.window_set_default_icon_from_file(icon + ".png")
+        theme = gtk.icon_theme_get_default()
+        pixbufs = []
+        for size in [64, 48, 32, 16]:
+            try: pixbufs.append(theme.load_icon(icon, size, 0))
+            except gobject.GError: pass
+        gtk.window_set_default_icon_list(*pixbufs)
 
 def _gettext_init():
     try: locale.setlocale(locale.LC_ALL, '')
@@ -117,6 +120,18 @@ def print_e(string):
     # Translators: "E" as in "Error". It is prepended to
     # terminal output. APT uses a similar output format.
     print_(string, prefix=_("E: "), log=_("Errors"), output=sys.stderr)
+
+def set_process_title(title):
+    """Sets process name as visible in ps or top. Requires ctypes libc
+    and is almost certainly *nix-only. See issue 736"""
+    try:
+        import ctypes
+        libc = ctypes.CDLL('libc.so.6')
+        # 15 = PR_SET_NAME, apparently
+        libc.prctl(15, title, 0, 0, 0)
+    except:
+        print_w(_("Couldn't find module %s." % ("libc.so.6 (ctypes)", ) + " "
+           + _("Not setting process title.")))
 
 def _python_init():
     # The default regex escaping function doesn't work for non-ASCII.

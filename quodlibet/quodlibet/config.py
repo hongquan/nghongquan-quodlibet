@@ -52,6 +52,10 @@ def set(section, option, value):
         value = str(value)
     _config.set(section, option, value)
 
+def setdefault(section, option, default):
+    if not _config.has_option(section, option):
+        set(section, option, default)
+
 def write(filename):
     if isinstance(filename, basestring):
         if not os.path.isdir(os.path.dirname(filename)):
@@ -86,6 +90,7 @@ def init(*rc_files):
           "backend": "gstbe",
           "gst_pipeline": "",
           "gst_buffer": "1.5", # stream buffer duration in seconds
+          "gst_device": "",
           },
 
         "library":
@@ -114,7 +119,6 @@ def init(*rc_files):
 
         "browsers":
         { "query_text": "", # none/search bar text
-          "color": "true", # color search terms in search bar
           "panes": "~people	<~year|\<b\>\<i\><~year>\</i\>\</b\> - ><album>", # panes in paned browser
           "pane_selection": "", # selected pane values
           "background": "", # "global" filter for SearchBar
@@ -161,7 +165,9 @@ def init(*rc_files):
           "add": "false",
           },
 
-        "plugins": { },
+        "plugins":
+        { "active_plugins": "", # newline separated plugin IDs
+          },
 
         "editing":
         { "split_on": "/ & ,", # words to split on

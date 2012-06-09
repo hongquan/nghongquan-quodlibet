@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright 2005 Joe Wreschnig
+#           2012 Nick Boultbee
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -154,7 +155,7 @@ class Playlist(list):
                 changed = True
         return changed
 
-    def remove_songs(self, songs, library):
+    def remove_songs(self, songs, library, leave_dupes=False):
         changed = False
         # TODO: document the "library.masked" business
         for song in songs:
@@ -164,7 +165,11 @@ class Playlist(list):
                     except ValueError: break
                     else: changed = True
             else:
-                while song in self: self.remove(song)
+                while song in self:
+                    self.remove(song)
+                    if leave_dupes:
+                        changed = True
+                        break
                 else: changed = True
         return changed
 
@@ -222,9 +227,18 @@ class Playlist(list):
                 songs_text,
                 util.format_time(self.length()))
 
+    def has_duplicates(self):
+        """Returns True if there are any duplicated files in this playlist"""
+        unique = set()
+        for s in self:
+            if s in unique: return False
+            else: unique.add(s)
+        return True
+
     def __cmp__(self, other):
         try: return cmp(self.name, other.name)
         except AttributeError: return -1
+
 
 class GetPlaylistName(GetStringDialog):
     def __init__(self, parent):
@@ -408,7 +422,24 @@ class Playlists(gtk.VBox, Browser):
         keyval, mod = gtk.accelerator_parse("F2")
         self.accelerators.connect_group(keyval, mod, 0, self.__rename)
 
+        self.connect('key-press-event', self.__key_pressed)
+
         self.show_all()
+
+    def __key_pressed(self, widget, event):
+        if qltk.is_accel(event, "Delete"):
+            model, iter = self.__view.get_selection().get_selected()
+            if iter:
+                if qltk.ConfirmAction(
+                    self, _("Confirm playlist removal"),
+                    _("You are about to delete the playlist '<i>%s</i>'.\n"
+                      "Do you wish to continue?")
+                      % util.escape(model[iter][0].name)).run():
+                    model[iter][0].delete()
+                    model.get_model().remove(
+                        model.convert_iter_to_child_iter(None, iter))
+                    return True
+        return False
 
     def __rename(self, group, acceleratable, keyval, modifier):
         model, iter = self.__view.get_selection().get_selected()
@@ -532,6 +563,33 @@ class Playlists(gtk.VBox, Browser):
             library, songs, playlists=False, remove=False, parent=self)
         menu.preseparate()
 
+        de_dupe = gtk.MenuItem(_("Remove Duplicates"))
+
+        def de_duplicate(model, iter):
+            playlist = model[iter][0]
+            unique = set()
+            dupes = list()
+            for s in songs:
+                if s in unique: dupes.append(s)
+                else: unique.add(s)
+            if len(dupes) < 1:
+                print_d("No duplicates in this playlist")
+                return
+            print_d("Duplicated: %s" % ([s("~filename") for s in dupes]))
+            action_msg = ngettext("You are about to remove %d song.",
+                    "You are about to remove %d songs.",len(dupes)) % len(dupes)
+            if qltk.ConfirmAction(self,
+                    _("Confirm duplicates removal"),
+                    "%s\n%s" % (action_msg, _("Do you wish to continue?"))
+                    ).run():
+                playlist.remove_songs(dupes, library, True)
+                Playlists.changed(playlist)
+                self.activate()
+
+        de_dupe.connect_object('activate', de_duplicate, model, iter)
+        de_dupe.set_sensitive(not model[iter][0].has_duplicates())
+        menu.prepend(de_dupe)
+
         rem = gtk.ImageMenuItem(gtk.STOCK_DELETE)
         def remove(model, iter):
             model[iter][0].delete()
@@ -603,12 +661,8 @@ class Playlists(gtk.VBox, Browser):
 
     def restore(self):
         try: name = config.get("browsers", "playlist")
-        except: pass
-        else:
-            for i, row in enumerate(self.__lists):
-                if row[0].name == name:
-                    self.__view.get_selection().select_path((i,))
-                    break
+        except: return
+        self.__view.select_by_func(lambda r: r[0].name == name, one=True)
 
     def reordered(self, songlist):
         songs = songlist.get_songs()

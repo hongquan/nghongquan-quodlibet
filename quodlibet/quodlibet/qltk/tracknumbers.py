@@ -19,7 +19,6 @@ class TrackNumbers(gtk.VBox):
         super(TrackNumbers, self).__init__(spacing=6)
         self.title = _("Track Numbers")
         self.set_border_width(12)
-        hbox = gtk.HBox(spacing=18)
         hbox2 = gtk.HBox(spacing=12)
 
         hbox_start = gtk.HBox(spacing=3)
@@ -126,6 +125,7 @@ class TrackNumbers(gtk.VBox):
             song["tracknumber"] = track
             try: song.write()
             except:
+                util.print_exc()
                 qltk.ErrorMessage(
                     win, _("Unable to save song"),
                     _("Saving <b>%s</b> failed. The file may be "

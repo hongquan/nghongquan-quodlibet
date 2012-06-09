@@ -5,7 +5,6 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation
 
-import os
 import sys
 
 import gtk
@@ -14,14 +13,11 @@ import gobject
 
 gtk_216 = gtk.gtk_version >= (2, 16)
 if not gtk_216:
-    try:
-        import egg.trayicon as trayicon
-    except ImportError:
-        import _trayicon as trayicon
+    import egg.trayicon as trayicon
 
 from gtk.gdk import SCROLL_LEFT, SCROLL_RIGHT, SCROLL_UP, SCROLL_DOWN
 
-from quodlibet import browsers, config, const, qltk, stock, util
+from quodlibet import browsers, config, qltk, stock, util
 from quodlibet.library import library
 from quodlibet.parse import Pattern
 from quodlibet.player import playlist as player
@@ -219,7 +215,7 @@ class TrayIcon(EventPlugin):
 
     def enabled(self):
         global gtk_216
-        filename = os.path.join(const.IMAGEDIR, "quodlibet.")
+
         if gtk_216:
             self.__icon = gtk.StatusIcon()
         else:
@@ -293,24 +289,9 @@ class TrayIcon(EventPlugin):
             try:
                 self.__pixbuf = self.__icon_theme.load_icon(
                     "quodlibet", self.__size, 0)
-            except gobject.GError: pass
-
-        # images got moved into the theme dir after 2.3
-        # this can be removed after 2.4 is out
-        if not self.__pixbuf:
-            pixbuf_size = max(int(self.__size * 0.75), 1)
-            filename = os.path.join(const.IMAGEDIR, "quodlibet.")
-            try:
-                self.__pixbuf = gtk.gdk.pixbuf_new_from_file_at_size(
-                    filename + "svg", *(pixbuf_size * 2,) * 2)
             except gobject.GError:
-                try:
-                    self.__pixbuf = gtk.gdk.pixbuf_new_from_file(
-                        filename + "png")
-                except gobject.GError:
-                    pass
-            if self.__pixbuf:
-                self.__pixbuf = scale(self.__pixbuf, (pixbuf_size,) * 2)
+                util.print_exc()
+                return
 
         #we need to fill the whole height that is given to us, or
         #the KDE panel will emit size-changed until we reach 0

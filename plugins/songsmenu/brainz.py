@@ -367,6 +367,9 @@ class SearchWindow(gtk.Dialog):
         num_results = len(self._resultlist)
         text = ngettext("Found %d result.", "Found %d results.", num_results)
         self.result_label.set_text(text % num_results)
+        # issue 973: search can return invalid (or removed) ReleaseIDs
+        if release is None:
+            return
         self._releasecache.setdefault(extractUuid(release.id), release)
         self.result_treeview.update_remote_album(release.tracks)
         self.current_release = release
@@ -465,7 +468,7 @@ class MyBrainz(SongsMenuPlugin):
                 discnum = int(song.get('discnumber', '1').split('/')[0])
                 discs.setdefault(discnum, []).append(song)
             for disc in discs.values():
-                s = SearchWindow(disc, self.cache).run()
+                SearchWindow(disc, self.cache).run()
 
     @classmethod
     def PluginPreferences(self, win):

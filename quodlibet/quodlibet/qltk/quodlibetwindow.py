@@ -11,7 +11,6 @@ import sys
 
 import gobject
 import gtk
-import pango
 
 from quodlibet import browsers
 from quodlibet import config
@@ -23,7 +22,7 @@ from quodlibet import stock
 from quodlibet import util
 
 from quodlibet.formats.remote import RemoteFile
-from quodlibet.parse import Query
+from quodlibet.qltk import mmkeys_ as mmkeys
 from quodlibet.qltk.browser import LibraryBrowser
 from quodlibet.qltk.chooser import FolderChooser, FileChooser
 from quodlibet.qltk.controls import PlayControls
@@ -32,7 +31,6 @@ from quodlibet.qltk.getstring import GetStringDialog
 from quodlibet.qltk.info import SongInfo
 from quodlibet.qltk.information import Information
 from quodlibet.qltk.logging import LoggingWindow
-from quodlibet.qltk.mmkeys_ import MmKeys
 from quodlibet.qltk.msg import ErrorMessage
 from quodlibet.qltk.notif import StatusBar, TaskController
 from quodlibet.qltk.playorder import PlayOrder
@@ -60,16 +58,16 @@ class MainSongList(SongList):
             row = model[iter]
             if row.path == model.current_path:
                 if model.sourced:
-                    stock = pixbuf[player.playlist.paused]
+                    stock_icon = pixbuf[player.playlist.paused]
                 else:
-                    stock = gtk.STOCK_MEDIA_STOP
+                    stock_icon = gtk.STOCK_MEDIA_STOP
             elif row[0].get("~errors"):
-                stock = gtk.STOCK_DIALOG_ERROR
+                stock_icon = gtk.STOCK_DIALOG_ERROR
             else:
-                stock = ''
-            if self.__last_stock == stock: return
-            self.__last_stock = stock
-            cell.set_property('stock-id', stock)
+                stock_icon = ''
+            if self.__last_stock == stock_icon: return
+            self.__last_stock = stock_icon
+            cell.set_property('stock-id', stock_icon)
 
         def __init__(self):
             self._render = gtk.CellRendererPixbuf()
@@ -118,6 +116,11 @@ class SongListScroller(gtk.ScrolledWindow):
         config.set("memory", "songlist", str(value))
 
 class QuodLibetWindow(gtk.Window):
+    SIG_PYOBJECT = (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, (object,))
+    __gsignals__ = {
+        'artwork-changed': SIG_PYOBJECT,
+    }
+
     def __init__(self, library, player):
         super(QuodLibetWindow, self).__init__()
         self.last_dir = const.HOME
@@ -176,6 +179,7 @@ class QuodLibetWindow(gtk.Window):
         # cover image
         self.image = CoverImage(resize=True)
         player.connect('song-started', self.image.set_song)
+        self.connect('artwork-changed', self.__song_art_changed)
         hbox.pack_start(self.image, expand=False)
 
         realvbox.pack_start(hbox, expand=False)
@@ -216,7 +220,7 @@ class QuodLibetWindow(gtk.Window):
 
         self.browser = None
 
-        self.__keys = MmKeys(player)
+        mmkeys.init(self, player)
 
         self.child.show_all()
 
@@ -624,7 +628,7 @@ class QuodLibetWindow(gtk.Window):
         if not self.browser.dynamic(song):
             iter = self.songlist.model.find(song)
             if iter:
-                self.songlist.model.remove(iter)
+                self.songlist.remove_iters([iter])
                 self.__set_time()
 
     def __song_ended(self, player, song, stopped):
@@ -634,6 +638,18 @@ class QuodLibetWindow(gtk.Window):
         self.__update_title(player)
         for song in songs:
             self.__check_remove_song(player, song)
+
+    def __song_art_changed(self, player, songs):
+        self.image.refresh()
+        refresh_albums = []
+        for song in songs:
+            # Album browser only (currently):
+            album = self.__library.albums.get(song.album_key, None)
+            if album:
+                album.scan_cover(force=True)
+                refresh_albums.append(album)
+        if refresh_albums:
+            self.__library.albums.refresh(refresh_albums)
 
     def __update_title(self, player):
         song = player.info
@@ -818,7 +834,7 @@ class QuodLibetWindow(gtk.Window):
                     util.escape(name))).run()
             else:
                 if name not in self.__library:
-                    song = self.__library.add([RemoteFile(name)])
+                    self.__library.add([RemoteFile(name)])
 
     def open_chooser(self, action):
         if not os.path.exists(self.last_dir):

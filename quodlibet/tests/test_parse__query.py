@@ -106,8 +106,10 @@ class TQuery(TestCase):
             { "album": "Foo the Bar", "artist": "mu", "title": "Rockin' Out",
               "~filename": "/dir2/something.mp3", "tracknumber": "12/15" })
 
-        self.s3 = self.AF({"artist": "piman\nmu"})
-        self.s4 = self.AF({"title": u"Ångström"})
+        self.s3 = self.AF(
+            {"artist": "piman\nmu",
+             "~filename": "/test/\xc3\xb6\xc3\xa4\xc3\xbc/fo\xc3\xbc.ogg"})
+        self.s4 = self.AF({"title": u"Ångström", })
         self.s5 = self.AF({"title": "oh&blahhh", "artist": "!ohno"})
 
     def test_2007_07_27_synth_search(self):
@@ -158,7 +160,7 @@ class TQuery(TestCase):
         self.failUnless(Query("#(13 > track > 11)").search(self.s2))
         self.failUnless(Query("#(20 > track < 20)").search(self.s2))
 
-    def test_not(self):
+    def test_not_2(self):
         for s in ["album = !/i hate/", "artist = !/pi*/", "title = !/x.y/"]:
             self.failUnless(Query(s).search(self.s2))
             self.failIf(Query(s).search(self.s1))
@@ -268,18 +270,24 @@ class TQuery(TestCase):
         self.failUnless(Query.match_all("    "))
         self.failIf(Query.match_all("foo"))
 
+    def test_fs_utf8(self):
+        self.failUnless(Query(u"~filename=foü.ogg").search(self.s3))
+        self.failUnless(Query(u"~filename=öä").search(self.s3))
+        self.failUnless(Query(u"~dirname=öäü").search(self.s3))
+        self.failUnless(Query(u"~basename=ü.ogg").search(self.s3))
+
 add(TQuery)
 
 class TQuery_is_valid_color(TestCase):
     def test_red(self):
         for p in ["a = /w", "|(sa#"]:
-            self.failUnlessEqual("red", Query.is_valid_color(p))
+            self.failUnlessEqual(False, Query.is_valid_color(p))
 
-    def test_blue(self):
+    def test_black(self):
         for p in ["a test", "more test hooray"]:
-            self.failUnlessEqual("blue", Query.is_valid_color(p))
+            self.failUnlessEqual(None, Query.is_valid_color(p))
 
     def test_green(self):
         for p in ["a = /b/", "&(a = b, c = d)", "/abc/", "!x", "!&(abc, def)"]:
-            self.failUnlessEqual("dark green", Query.is_valid_color(p))
+            self.failUnlessEqual(True, Query.is_valid_color(p))
 add(TQuery_is_valid_color)

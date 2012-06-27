@@ -1,27 +1,96 @@
 # -*- coding: utf-8 -*-
 # Copyright 2004-2005 Joe Wreschnig, Michael Urman, Iñigo Serna
+#           2012 Christoph Reiter
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation
 
-class MmKeys(object):
-    def __init__(self, player):
-        try: import quodlibet._mmkeys as mmkeys
-        except:
-            try: import mmkeys
-            except: return
-        self.__keys = mmkeys.MmKeys()
-        self.__keys.connect('mm_prev', self.__previous, player)
-        self.__keys.connect('mm_next', self.__next, player)
-        self.__keys.connect('mm_stop', self.__stop, player)
-        self.__keys.connect('mm_playpause', self.__play_pause, player)
+__all__ = ["init"]
 
-    def __previous(self, keys, key, player): player.previous()
-    def __next(self, keys, key, player): player.next()
-    def __stop(self, keys, key, player): player.stop()
+def do_action(player, action):
+    print_d("action: %s" % action)
 
-    def __play_pause(self, keys, key, player):
+    if action == "prev":
+        player.previous()
+    elif action == "next":
+        player.next()
+    elif action == "stop":
+        player.stop()
+    elif action == "play":
         if player.song is None:
             player.reset()
-        else: player.paused ^= True
+        else:
+            player.paused ^= True
+    elif action == "pause":
+        player.paused = True
+    else:
+        print_d("didn't handle: %s" % action)
+
+
+def init_dbus_mmkeys(window, player):
+    try:
+        from quodlibet.qltk.dbusmmkey import DBusMMKey
+    except ImportError: # no dbus
+        return False
+
+    if not DBusMMKey.is_active():
+        return False
+
+    sigs = {"Next": "next", "Previous": "prev", "Play": "play",
+            "Pause": "pause", "Next": "next", "Stop": "stop"}
+
+    keys = DBusMMKey(window, "quodlibet")
+    keys.connect_object("action", lambda p, a: do_action(p, sigs[a]), player)
+
+    return True
+
+
+def init_mmkeys(player):
+    try:
+        import mmkeys
+    except ImportError:
+        return False
+
+    global _keys # keep a reference, or it wont work
+    _keys = keys = mmkeys.MmKeys()
+    signals = {"mm_prev": "prev", "mm_next": "next", "mm_stop": "stop",
+               "mm_playpause": "play"}
+
+    keys_cb = lambda p, x, a: do_action(p, a)
+    for sig, action in signals.items():
+        keys.connect_object(sig, keys_cb, player, action)
+
+    return True
+
+
+def init_keybinder(player):
+    try:
+        import keybinder
+    except ImportError:
+        return False
+
+    signals = {"XF86AudioPrev": "prev", "XF86AudioNext": "next",
+               "XF86AudioStop": "stop", "XF86AudioPlay": "play"}
+    for sig, action in signals.items():
+        keybinder.bind(sig, do_action, player, action)
+
+    return True
+
+
+def init(window, player):
+    print_d("Grab multimedia keys")
+
+    if init_dbus_mmkeys(window, player):
+        print_d("dbus mmkeys: ok")
+        return
+
+    if init_mmkeys(player):
+        print_d("mmkeys: ok")
+        return
+
+    if init_keybinder(player):
+        print_d("keybinder: ok")
+        return
+
+    print_d("grabbing failed..")

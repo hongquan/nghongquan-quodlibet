@@ -11,13 +11,13 @@ bar_1_1 = AudioFile({
     "~filename": "/fakepath/1",
     "title": "A song",
     "discnumber": "1/2", "tracknumber": "1/3",
-    "artist": "Foo", "album": "Bar" })
+    "artist": "Foo", "album": "Bar"})
 bar_1_2 = AudioFile({
     "~filename": "/fakepath/2",
     "title": "Perhaps another",
     "discnumber": "1", "tracknumber": "2/3",
     "artist": "Lali-ho!", "album": "Bar",
-    "date": "2004-12-12"})
+    "date": "2004-12-12", "originaldate": "2005-01-01"})
 bar_2_1 = AudioFile({
     "~filename": "does not/exist",
     "title": "more songs",
@@ -81,6 +81,11 @@ class TAudioFile(TestCase):
         self.failUnlessEqual(bar_1_2("~year"), "2004")
         self.failUnlessEqual(bar_1_2("~#year"), 2004)
         self.failUnlessEqual(bar_1_1("~#year", 1999), 1999)
+
+    def test_originalyear(self):
+        self.failUnlessEqual(bar_1_2("~originalyear"), "2005")
+        self.failUnlessEqual(bar_1_2("~#originalyear"), 2005)
+        self.failUnlessEqual(bar_1_1("~#originalyear", 1999), 1999)
 
     def test_call_people(self):
         self.failUnlessEqual(quux("~people"), "")
@@ -545,8 +550,8 @@ class Tfind_cover(TestCase):
 
     def test_regular(self):
         files = [os.path.join(self.dir, f) for f in
-                 ["cover.png", "frontcover.jpg", "frontfoldercover.gif",
-                  "jacketcoverfrontfolder.jpeg"]]
+                 ["cover.png", "folder.jpg", "frontcover.jpg",
+                  "front_folder_cover.gif", "jacket_cover.front.folder.jpeg"]]
         for f in files:
             file(f, "w").close()
             self.files.append(f)
@@ -570,6 +575,34 @@ class Tfind_cover(TestCase):
             else:
                 # Here, no cover is better than the back...
                 self.failUnlessEqual(f, self.full_path("Quuxly - back.jpg"))
+
+    def test_embedded_special_cover_words(self):
+        """Tests that words incidentally containing embedded "special" words 
+        album keywords (e.g. cover, disc, back) don't trigger
+        See Issue 818"""
+
+        song = AudioFile({
+            "~filename": "tests/data/asong.ogg",
+            "album": "foobar",
+            "title": "Ode to Baz",
+            "artist": "Q-Man",
+        })
+        files = [self.full_path(f) for f in
+                 ['back.jpg',
+                  'discovery.jpg', "Pharell - frontin'.jpg",
+                  'nickelback - Curb.jpg',
+                  'foobar.jpg', 'folder.jpg',     # Though this is debatable
+                  'Q-Man - foobar.jpg', 'Q-man - foobar (cover).jpg']]
+        for f in files:
+            file(f, "w").close()
+            self.files.append(f)
+            cover = song.find_cover()
+            if cover:
+                actual = os.path.abspath(cover.name)
+                self.failUnlessEqual(actual, f,
+                                     "\"%s\" should trump \"%s\"" % (f, actual))
+            else:
+                self.failUnless(f, self.full_path('back.jpg'));
 
     def tearDown(self):
         map(os.unlink, self.files)

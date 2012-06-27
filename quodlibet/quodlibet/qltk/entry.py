@@ -16,7 +16,6 @@ if not getattr(gtk.Entry, "set_icon_from_stock", None):
     try: from sexy import IconEntry
     except ImportError: pass
 
-from quodlibet import config
 from quodlibet.qltk.x import ClearButton, is_accel
 
 class EditableUndo(object):
@@ -198,26 +197,29 @@ class ClearNoSexyEntry(UndoNoSexyEntry, ClearEntryMixin):
 class ValidatingEntryMixin(object):
     """An entry with visual feedback as to whether it is valid or not.
     The given validator function gets a string and returns True (green),
-    False (red), or a color string, or None (black).
+    False (red), or None (black).
 
     parse.Query.is_valid_color mimicks the behavior of the search bar.
 
     If the "Color search terms" option is off, the entry will not
     change color."""
 
+    INVALID = gtk.gdk.Color(*[c * 255 for c in (0xcc, 0x0, 0x0)])
+    VALID = gtk.gdk.Color(*[c * 180 for c in (0x4e, 0x9a, 0x06)])
+
     def set_validate(self, validator=None):
         if validator: self.connect_object('changed', self.__color, validator)
 
     def __color(self, validator):
-        if config.getboolean('browsers', 'color'):
-            value = validator(self.get_text())
-            if value is True: color = "dark green"
-            elif value is False: color = "red"
-            elif isinstance(value, str): color = value
-            else: color = None
+        value = validator(self.get_text())
+        if value is True: color = self.VALID
+        elif value is False: color = self.INVALID
+        elif value and isinstance(value, str):
+            color = gtk.gdk.color_parse(value)
+        else: color = None
 
-            if color and self.get_property('sensitive'):
-                self.modify_text(gtk.STATE_NORMAL, gtk.gdk.color_parse(color))
+        if color and self.get_property('sensitive'):
+            self.modify_text(gtk.STATE_NORMAL, color)
         else:
             self.modify_text(gtk.STATE_NORMAL, None)
 
@@ -230,3 +232,4 @@ class ValidatingNoSexyEntry(ClearNoSexyEntry, ValidatingEntryMixin):
     def __init__(self, validator=None, *args):
         super(ValidatingNoSexyEntry, self).__init__(*args)
         self.set_validate(validator)
+

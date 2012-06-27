@@ -13,7 +13,7 @@ from quodlibet import const
 from quodlibet import qltk
 from quodlibet import util
 
-from quodlibet.plugins import Manager
+from quodlibet.plugins import PluginManager
 from quodlibet.qltk.views import HintedTreeView
 from quodlibet.qltk.entry import ClearEntry
 
@@ -36,8 +36,7 @@ class PluginErrorWindow(qltk.UniqueWindow):
         scrolledwin.add_with_viewport(vbox)
 
         failures = {}
-        for pm in Manager.instances.values():
-            failures.update(pm.list_failures())
+        failures.update(PluginManager.instance.failures)
         keys = failures.keys()
         show_expanded = len(keys) <= 3
         for key in sorted(keys):
@@ -46,7 +45,7 @@ class PluginErrorWindow(qltk.UniqueWindow):
             if show_expanded: expander.set_expanded(True)
 
             # second line is always the __rescan line; don't show it
-            message = failures[key][0:1] + failures[key][2:]
+            message = failures[key][0:1] + failures[key][3:]
             failure = gtk.Label(''.join(message).strip())
             failure.set_alignment(0, 0)
             failure.set_padding(12, 6)
@@ -121,20 +120,20 @@ class PluginWindow(qltk.UniqueWindow):
         tv.append_column(column)
 
         render = gtk.CellRendererPixbuf()
-        def cell_data(col, render, model, iter):
+        def cell_data2(col, render, model, iter):
             icon = getattr(model[iter][0], 'PLUGIN_ICON', gtk.STOCK_EXECUTE)
             render.set_property('stock-id', icon)
         column = gtk.TreeViewColumn("image", render)
-        column.set_cell_data_func(render, cell_data)
+        column.set_cell_data_func(render, cell_data2)
         tv.append_column(column)
 
         render = gtk.CellRendererText()
         render.set_property('ellipsize', pango.ELLIPSIZE_END)
         render.set_property('xalign', 0.0)
         column = gtk.TreeViewColumn("name", render)
-        def cell_data(col, render, model, iter):
+        def cell_data3(col, render, model, iter):
             render.set_property('text', model[iter][0].PLUGIN_NAME)
-        column.set_cell_data_func(render, cell_data)
+        column.set_cell_data_func(render, cell_data3)
         column.set_expand(True)
         tv.append_column(column)
 
@@ -288,11 +287,11 @@ class PluginWindow(qltk.UniqueWindow):
         failures = False
         model.clear()
 
-        for pm in Manager.instances.values():
-            pm.rescan()
-            for plugin in pm.list():
-                plugins.append((plugin.PLUGIN_NAME, plugin, pm))
-            failures = failures or bool(pm.list_failures())
+        pm = PluginManager.instance
+        pm.rescan()
+        for plugin in pm.plugins:
+            plugins.append((plugin.PLUGIN_NAME, plugin, pm))
+        failures = failures or bool(pm.failures)
 
         tags = []
         no_tags = False

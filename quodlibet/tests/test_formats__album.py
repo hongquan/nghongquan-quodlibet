@@ -1,8 +1,26 @@
+from __future__ import print_function
 from quodlibet.formats._audio import AudioFile as Fakesong
 from quodlibet.formats._audio import INTERN_NUM_DEFAULT, PEOPLE
-from quodlibet.formats._album import Album
-
+from quodlibet.formats._album import Album, Playlist
+import tempfile
 from tests import TestCase, add
+
+
+PLAYLISTS = tempfile.gettempdir()
+
+NUMERIC_SONGS = [
+    Fakesong({"~filename":"fake1.mp3",
+              "~#length": 4, "~#added": 5, "~#lastplayed": 1,
+              "~#bitrate": 200, "date": "100", "~#rating": 0.1,
+              "originaldate": "2004-01-01", "~#filesize":101}),
+    Fakesong({"~filename":"fake2.mp3",
+              "~#length": 7, "~#added": 7, "~#lastplayed": 88,
+              "~#bitrate": 220, "date": "99", "~#rating": 0.3,
+              "originaldate": "2002-01-01", "~#filesize":202}),
+    Fakesong({"~filename":"fake3.mp3",
+              "~#length": 1, "~#added": 3, "~#lastplayed": 43,
+              "~#bitrate": 60, "date": "33", "~#rating": 0.5})
+]
 
 class TAlbum(TestCase):
     def test_people_sort(s):
@@ -76,9 +94,11 @@ class TAlbum(TestCase):
     def test_numeric_ops(s):
         songs = [
             Fakesong({"~#length": 4, "~#added": 5, "~#lastplayed": 1,
-            "~#bitrate": 200, "date": "100", "~#rating": 0.1}),
+            "~#bitrate": 200, "date": "100", "~#rating": 0.1,
+            "originaldate": "2004-01-01"}),
             Fakesong({"~#length": 7, "~#added": 7, "~#lastplayed": 88,
-            "~#bitrate": 220, "date": "99", "~#rating": 0.3}),
+            "~#bitrate": 220, "date": "99", "~#rating": 0.3,
+            "originaldate": "2002-01-01"}),
             Fakesong({"~#length": 1, "~#added": 3, "~#lastplayed": 43,
             "~#bitrate": 60, "date": "33", "~#rating": 0.5})
         ]
@@ -98,6 +118,7 @@ class TAlbum(TestCase):
         s.failUnlessEqual(album.get("~#bitrate"), 200)
         s.failUnlessEqual(album.get("~#year"), 33)
         s.failUnlessEqual(album.get("~#rating"), 0.3)
+        s.failUnlessEqual(album.get("~#originalyear"), 2002)
 
     def test_defaults(s):
         failUnlessEq = s.failUnlessEqual
@@ -149,3 +170,101 @@ class TAlbum(TestCase):
         s.failUnlessEqual(album.comma("~c~b"), "cc3, cc1 - bb1, bb4")
 
 add(TAlbum)
+
+class TPlaylist(TestCase):
+
+    TWO_SONGS= [
+        Fakesong({"~#length": 5, "discnumber": "1", "date": "2038"}),
+        Fakesong({"~#length": 7, "dummy": "d\ne", "discnumber": "2"})
+    ]
+
+    def test_equality(s):
+        pl = Playlist(PLAYLISTS, "playlist")
+        pl2 = Playlist(PLAYLISTS, "playlist")
+        pl3 = Playlist("./", "playlist")
+        s.failUnlessEqual(pl, pl2)
+        # Debatable
+        s.failUnlessEqual(pl, pl3)
+        pl4 = Playlist(PLAYLISTS, "foobar")
+        s.failIfEqual(pl, pl4)
+
+    def test_index(s):
+        pl = Playlist(PLAYLISTS, "playlist")
+        songs = s.TWO_SONGS
+        pl.extend(songs)
+        # Just a sanity check...
+        s.failUnlessEqual(1, songs.index(songs[1]))
+        # And now the happy paths..
+        s.failUnlessEqual(0, pl.index(songs[0]))
+        s.failUnlessEqual(1, pl.index(songs[1]))
+        # ValueError is what we want here
+        try:
+            pl.index(Fakesong({}))
+            s.fail()
+        except ValueError: pass
+
+    def test_internal_tags(s):
+        pl = Playlist(PLAYLISTS, "playlist")
+        pl.extend(s.TWO_SONGS)
+
+        s.failIfEqual(pl.comma("~long-length"), "")
+        s.failIfEqual(pl.comma("~tracks"), "")
+        s.failIfEqual(pl.comma("~discs"), "")
+        s.failUnlessEqual(pl.comma("~foo"), "")
+
+        s.failUnlessEqual(pl.comma(""), "")
+        s.failUnlessEqual(pl.comma("~"), "")
+        s.failUnlessEqual(pl.get("~#"), "")
+
+    def test_numeric_ops(s):
+        songs = NUMERIC_SONGS
+        pl = Playlist(PLAYLISTS, "playlist")
+        pl.extend(songs)
+
+        s.failUnlessEqual(pl.get("~#length"), 12)
+        s.failUnlessEqual(pl.get("~#length:sum"), 12)
+        s.failUnlessEqual(pl.get("~#length:max"), 7)
+        s.failUnlessEqual(pl.get("~#length:min"), 1)
+        s.failUnlessEqual(pl.get("~#length:avg"), 4)
+        s.failUnlessEqual(pl.get("~#length:foo"), 0)
+
+        s.failUnlessEqual(pl.get("~#filesize"), 303)
+
+        s.failUnlessEqual(pl.get("~#added"), 7)
+        s.failUnlessEqual(pl.get("~#lastplayed"), 88)
+        s.failUnlessEqual(pl.get("~#bitrate"), 200)
+        s.failUnlessEqual(pl.get("~#year"), 33)
+        s.failUnlessEqual(pl.get("~#rating"), 0.3)
+        s.failUnlessEqual(pl.get("~#originalyear"), 2002)
+
+    def test_listlike(s):
+        pl = Playlist(PLAYLISTS, "playlist")
+        pl.extend(NUMERIC_SONGS)
+        s.failUnlessEqual(NUMERIC_SONGS[0], pl[0])
+        s.failUnlessEqual(NUMERIC_SONGS[1:2], pl[1:2])
+        s.failUnless(NUMERIC_SONGS[1] in pl)
+
+    def test_playlists_featuring(s):
+        Playlist._remove_all()
+        Playlist._clear_global_cache()
+        pl = Playlist(PLAYLISTS, "playlist")
+        pl.extend(NUMERIC_SONGS)
+        playlists = Playlist.playlists_featuring(NUMERIC_SONGS[0])
+        s.failUnlessEqual(playlists, set([pl]))
+        # Now add a second one, check that instance tracking works
+        pl2 = Playlist(PLAYLISTS, "playlist2")
+        pl2.append(NUMERIC_SONGS[0])
+        playlists = Playlist.playlists_featuring(NUMERIC_SONGS[0])
+        s.failUnlessEqual(playlists, set([pl, pl2]))
+
+    def test_playlists_tag(self):
+        # Arguably belongs in _audio
+        songs = NUMERIC_SONGS
+        Playlist._remove_all()
+        Playlist._clear_global_cache()
+        pl_name="playlist 123!"
+        pl = Playlist(PLAYLISTS, pl_name)
+        pl.extend(songs)
+        for song in songs:
+            self.assertEquals(pl_name, song("~playlists"))
+add(TPlaylist)

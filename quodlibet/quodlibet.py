@@ -44,6 +44,8 @@ def main():
             break
 
     from quodlibet import browsers
+    browsers.init()
+
     from quodlibet.qltk.songlist import SongList
 
     try: ratings = config.getint("settings", "ratings")
@@ -103,48 +105,42 @@ def main():
     print_d("Finished shutdown.")
 
 def init_plugins(player, library):
-    from quodlibet.plugins.editing import EditingPlugins
-    from quodlibet.plugins.songsmenu import SongsMenuPlugins
-    from quodlibet.plugins.events import EventPlugins
-    from quodlibet.plugins.playorder import PlayOrderPlugins
+    pm = quodlibet.init_plugins()
+
     from quodlibet.qltk.songsmenu import SongsMenu
-    from quodlibet.qltk.properties import SongProperties
+    SongsMenu.init_plugins()
+
+    # uhh hacky.. plugins import widget.main/watcher,
+    # but we want to assign them later.
+    # So go through the plugin globals, replace them and pray
     from quodlibet import widgets
+    widgets.main = main_dummy = object()
+    widgets.watcher = watcher_dummy = object()
 
-    widgets.watcher = library.librarian
+    pm.rescan()
 
-    SongsMenu.plugins = SongsMenuPlugins(
-        [os.path.join(const.BASEDIR, "plugins", "songsmenu"),
-         os.path.join(const.USERDIR, "plugins", "songsmenu")], "songsmenu")
-    SongsMenu.plugins.rescan()
-
-    SongProperties.plugins = EditingPlugins(
-        [os.path.join(const.BASEDIR, "plugins", "editing"),
-         os.path.join(const.USERDIR, "plugins", "editing")], "editing")
-
-    playorder = PlayOrderPlugins(
-        [os.path.join(const.BASEDIR, "plugins", "playorder"),
-         os.path.join(const.USERDIR, "plugins", "playorder")], "playorder")
-    playorder.rescan()
-
-    # main window
     from quodlibet.qltk.quodlibetwindow import QuodLibetWindow
     window = QuodLibetWindow(library, player)
+
     widgets.main = window
+    widgets.watcher = library.librarian
 
-    events = EventPlugins(library.librarian, player, [
-        os.path.join(const.BASEDIR, "plugins", "events"),
-        os.path.join(const.USERDIR, "plugins", "events")], "events")
-    events.rescan()
+    for module in pm._modules:
+        for key, value in vars(module).items():
+            if value is main_dummy:
+                vars(module)[key] = widgets.main
+            elif value is watcher_dummy:
+                vars(module)[key] = widgets.watcher
 
-    for p in [playorder, SongsMenu.plugins, SongProperties.plugins, events]:
-        window.connect('destroy', p.destroy)
+    from quodlibet.plugins.events import EventPluginHandler
+    handler = EventPluginHandler(library.librarian, player)
+    pm.register_handler(handler)
 
     return window
 
 def print_fifo(command):
     if not os.path.exists(const.CURRENT):
-        raise SystemExit("not-running")
+        quodlibet.exit("not-running")
     else:
         fd, filename = tempfile.mkstemp()
         try:
@@ -164,11 +160,11 @@ def print_fifo(command):
             try: os.unlink(filename)
             except EnvironmentError: pass
             f.close()
-            raise SystemExit
+            quodlibet.exit()
         except TypeError:
             try: os.unlink(filename)
             except EnvironmentError: pass
-            raise SystemExit("not-running")
+            quodlibet.exit("not-running")
 
 def print_playing(fstring="<artist~album~tracknumber~title>"):
     from quodlibet.formats._audio import AudioFile
@@ -179,10 +175,10 @@ def print_playing(fstring="<artist~album~tracknumber~title>"):
         song = AudioFile()
         song.from_dump(text)
         print_(Pattern(fstring).format(song))
-        raise SystemExit
+        quodlibet.exit()
     except (OSError, IOError):
         print_(_("No song is currently playing."))
-        raise SystemExit(True)
+        quodlibet.exit(True)
 
 def print_query(query):
     '''Queries library, dumping filenames of matches to stdout
@@ -195,14 +191,14 @@ def print_query(query):
     songs = library.query(query)
     #songs.sort()
     sys.stdout.write("\n".join([song("~filename") for song in songs]) + "\n")
-    raise SystemExit
+    quodlibet.exit()
 
 def isrunning():
     return os.path.exists(const.CONTROL)
 
 def control(c):
     if not isrunning():
-        raise SystemExit(_("Quod Libet is not running."))
+        quodlibet.exit(_("Quod Libet is not running."))
     else:
         try:
             # This is a total abuse of Python! Hooray!
@@ -217,9 +213,9 @@ def control(c):
             try: os.unlink(const.CONTROL)
             except OSError: pass
             if c != 'focus':
-                raise SystemExit(True)
+                raise quodlibet.exit(True)
         else:
-            raise SystemExit
+            quodlibet.exit()
 
 def process_arguments():
     controls = ["next", "previous", "play", "pause", "play-pause",
@@ -320,7 +316,7 @@ def process_arguments():
             if command in validators and not validators[command](arg):
                 print_e(_("Invalid argument for '%s'.") % command)
                 print_e(_("Try %s --help.") % sys.argv[0])
-                raise SystemExit(True)
+                quodlibet.exit(True)
             else: control(command + " " + arg)
         elif command == "status": print_fifo("status")
         elif command == "print-playlist": print_fifo("dump-playlist")

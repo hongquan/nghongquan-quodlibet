@@ -1,10 +1,11 @@
 # QLScrobbler: an Audioscrobbler client plugin for Quod Libet.
-# version 0.10.1
-# (C) 2005-2010 by Joshua Kwan <joshk@triplehelix.org>,
+# version 0.11
+# (C) 2005-2012 by Joshua Kwan <joshk@triplehelix.org>,
 #                  Joe Wreschnig <piman@sacredchao.net>,
 #                  Franz Pletyz <fpletz@franz-pletz.org>,
 #                  Nicholas J. Michalek <djphazer@gmail.com>,
 #                  Steven Robertson <steven@strobe.cc>
+#                  Nick Boultbee <nick.boultbee@gmail.com>
 # Licensed under GPLv2. See Quod Libet's COPYING for more information.
 
 import urllib
@@ -13,6 +14,8 @@ import time
 import threading
 import os
 import cPickle as pickle
+from quodlibet.util.dprint import print_d
+from httplib import HTTPException
 
 try:
     from hashlib import md5
@@ -36,8 +39,6 @@ DEFAULT_SERVICE = 'Last.fm'
 DEFAULT_TITLEPAT = '<title><version| (<version>)>'
 DEFAULT_ARTISTPAT = '<artist|<artist>|<composer|<composer>|<performer>>>'
 
-def log(msg):
-    print_d("[qlscrobbler] %s" % msg)
 
 def config_get(key, default=''):
     """Returns value for 'key' from config. If key is missing *or empty*,
@@ -69,7 +70,7 @@ class QLSubmitQueue:
     queue = []
     changed_event = threading.Event()
 
-    def nowplaying(self, song):
+    def set_nowplaying(self, song):
         """Send a Now Playing notification."""
         formatted = self._format_song(song)
         if not formatted or self.nowplaying_song == formatted:
@@ -88,8 +89,7 @@ class QLSubmitQueue:
         elif timestamp == 0:
             formatted['i'] = str(int(time.time()))
         else:
-            # Forging timestamps for submission from PMPs may be implemented
-            # for QL 2.5
+            # TODO: Forging timestamps for submission from PMPs
             return
         self.queue.append(formatted)
         self.changed()
@@ -129,7 +129,7 @@ class QLSubmitQueue:
             disk_queue_file.close()
             os.unlink(self.DUMP)
             self.queue += disk_queue
-        except:
+        except Exception:
             pass
 
     @classmethod
@@ -217,17 +217,17 @@ class QLSubmitQueue:
         url = "%s/?hs=true&p=%s&c=%s&v=%s&u=%s&a=%s&t=%d" % (
                     self.base_url, self.PROTOCOL_VERSION, self.CLIENT,
                     QLScrobbler.PLUGIN_VERSION, self.username, auth, stamp)
-        log("Sending handshake to service.")
+        print_d("Sending handshake to service.")
 
         try:
             resp = urllib2.urlopen(url)
-        except IOError:
+        except (IOError, HTTPException):
             if show_dialog:
                 self.quick_dialog(
                     "Could not contact service '%s'." %
                     util.escape(self.base_url), gtk.MESSAGE_ERROR)
             else:
-                log("Could not contact service. Queueing submissions.")
+                print_d("Could not contact service. Queueing submissions.")
             return False
         except ValueError:
             self.quick_dialog("Authentication failed: invalid URL.",
@@ -238,12 +238,12 @@ class QLSubmitQueue:
         # check response
         lines = resp.read().rstrip().split("\n")
         status = lines.pop(0)
-        log("Handshake status: %s" % status)
+        print_d("Handshake status: %s" % status)
 
         if status == "OK":
             self.session_id, self.nowplaying_url, self.submit_url = lines
             self.handshake_sent = True
-            log("Session ID: %s, NP URL: %s, Submit URL: %s" % (
+            print_d("Session ID: %s, NP URL: %s, Submit URL: %s" % (
                 self.session_id, self.nowplaying_url, self.submit_url))
             return True
         elif status == "BADAUTH":
@@ -267,13 +267,13 @@ class QLSubmitQueue:
         data_str = urllib.urlencode(data)
         try:
             resp = urllib2.urlopen(url, data_str)
-        except IOError:
-            log("Audioscrobbler server not responding, will try later.")
+        except (IOError, HTTPException):
+            print_d("Audioscrobbler server not responding, will try later.")
             return False
 
         resp_save = resp.read()
         status = resp_save.rstrip().split("\n")[0]
-        log("Submission status: %s" % status)
+        print_d("Submission status: %s" % status)
 
         if status == "OK":
             return True
@@ -292,7 +292,7 @@ class QLSubmitQueue:
             data['o[%d]' % idx] = 'P'
             data['r[%d]' % idx] = ''
 
-        log('Submitting song(s): %s' %
+        print_d('Submitting song(s): %s' %
             ('\n\t'.join(['%s - %s' % (s['a'], s['t']) for s in to_submit])))
 
         if self._check_submit(self.submit_url, data):
@@ -305,7 +305,7 @@ class QLSubmitQueue:
         data = {'s': self.session_id}
         for key, val in self.nowplaying_song.items():
             data[key] = val.encode('utf-8')
-        log('Now playing song: %s - %s' %
+        print_d('Now playing song: %s - %s' %
                 (self.nowplaying_song['a'], self.nowplaying_song['t']))
 
         return self._check_submit(self.nowplaying_url, data)
@@ -322,9 +322,9 @@ class QLScrobbler(EventPlugin):
     PLUGIN_ID = "QLScrobbler"
     PLUGIN_NAME = _("AudioScrobbler Submission")
     PLUGIN_DESC = _("Audioscrobbler client for Last.fm, Libre.fm and other "
-        "Audioscrobbler services.")
+                    "Audioscrobbler services.")
     PLUGIN_ICON = gtk.STOCK_CONNECT
-    PLUGIN_VERSION = "0.10.1"
+    PLUGIN_VERSION = "0.11"
 
     def __init__(self):
         self.__enabled = False
@@ -356,11 +356,22 @@ class QLScrobbler(EventPlugin):
             return
         if self.elapsed < 240 and self.elapsed <= .5 * song.get("~#length", 0):
             return
-        if self.exclude != "" and parse.Query(self.exclude).search(song):
-            log("Not submitting: %s - %s" % (song.get("artist"),
-                                             song.get("title")))
+        print_d("Checking against filter %s" % self.exclude)
+        if self.exclude and parse.Query(self.exclude).search(song):
+            print_d("Not submitting: %s" % song("~artist~title"))
             return
         self.queue.submit(song, self.start_time)
+
+    def song_excluded(self, song):
+        if self.exclude and parse.Query(self.exclude).search(song):
+            print_d("%s is excluded by %s" %
+                    (song("~artist~title"), self.exclude))
+            return True
+        return False
+
+    def send_nowplaying(self, song):
+        if not self.song_excluded(song):
+            self.queue.set_nowplaying(song)
 
     def plugin_on_song_started(self, song):
         if song is None:
@@ -372,7 +383,7 @@ class QLScrobbler(EventPlugin):
             self.unpaused_time = time.time()
         self.elapsed = 0
         if self.__enabled and not player.playlist.paused:
-            self.queue.nowplaying(song)
+            self.send_nowplaying(song)
         else:
             self.nowplaying = song
 
@@ -384,16 +395,16 @@ class QLScrobbler(EventPlugin):
     def plugin_on_unpaused(self):
         self.unpaused_time = time.time()
         if self.__enabled and self.nowplaying:
-            self.queue.nowplaying(self.nowplaying)
+            self.send_nowplaying(self.nowplaying)
             self.nowplaying = None
 
     def enabled(self):
         self.__enabled = True
-        log("Plugin enabled - accepting new songs.")
+        print_d("Plugin enabled - accepting new songs.")
 
     def disabled(self):
         self.__enabled = False
-        log("Plugin disabled - not accepting any new songs.")
+        print_d("Plugin disabled - not accepting any new songs.")
 
     def PluginPreferences(self, parent):
         def changed(entry, key):

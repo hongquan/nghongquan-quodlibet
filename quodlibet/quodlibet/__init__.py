@@ -134,6 +134,14 @@ del(_dummy_ngettext)
 _python_init()
 _gettext_init()
 
+
+def exit(status=None):
+    """Call this to abort the startup"""
+    import gtk
+    gtk.gdk.notify_startup_complete()
+    raise SystemExit(status)
+
+
 def init(library=None, icon=None, title=None, name=None):
     print_d("Entering quodlibet.init")
 
@@ -170,6 +178,26 @@ def init(library=None, icon=None, title=None, name=None):
     print_d("Finished initialization.")
 
     return library
+
+def init_plugins():
+    print_d("Starting plugin manager")
+
+    from quodlibet import plugins
+    folders = [os.path.join(quodlibet.const.BASEDIR, "plugins", "editing"),
+               os.path.join(quodlibet.const.BASEDIR, "plugins", "events"),
+               os.path.join(quodlibet.const.BASEDIR, "plugins", "playorder"),
+               os.path.join(quodlibet.const.BASEDIR, "plugins", "songsmenu"),
+               os.path.join(quodlibet.const.USERDIR, "plugins")]
+    pm = plugins.init(folders)
+
+    from quodlibet.qltk.edittags import EditTags
+    from quodlibet.qltk.renamefiles import RenameFiles
+    from quodlibet.qltk.tagsfrompath import TagsFromPath
+    EditTags.init_plugins()
+    RenameFiles.init_plugins()
+    TagsFromPath.init_plugins()
+
+    return pm
 
 def init_backend(backend, librarian):
     import quodlibet.player
@@ -242,6 +270,10 @@ def main(window):
     import gtk
 
     def quit_gtk(m):
+        # disable plugins
+        import quodlibet.plugins
+        quodlibet.plugins.quit()
+
         # stop all copools
         print_d("Quit GTK: Stop all copools")
         from quodlibet.util import copool

@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import traceback
+import platform
 
 import gtk
 
@@ -15,7 +16,6 @@ class ExceptionDialog(gtk.Window):
 
     @classmethod
     def excepthook(Kind, *args):
-        seconds = int(time.time())
         dump = os.path.join(
             const.USERDIR, time.strftime("Dump_%Y%m%d_%H%M%S.txt"))
         minidump = os.path.join(
@@ -34,9 +34,9 @@ class ExceptionDialog(gtk.Window):
         from quodlibet.util import logging
         dumpobj = file(dump, "w")
         minidumpobj = file(minidump, "w")
-        header = "Quod Libet %s\nMutagen %s\nPython %s %s" %(
+        header = "Quod Libet %s\nMutagen %s\nPython %s %s\nPlatform %s" %(
             const.VERSION, mutagen.version_string, sys.version,
-            sys.platform)
+            sys.platform, platform.platform())
 
         minidump_data = ("=== SYSTEM INFORMATION:\n%s\n\n"
                          "=== STACK TRACE\n%s\n\n") % (
@@ -54,17 +54,15 @@ class ExceptionDialog(gtk.Window):
         dumpobj.close()
 
     def __init__(self, Kind, value, traceback, dump, minidump):
-        window = self.__create_window(Kind, value, traceback, dump, minidump)
+        self.__create_window(Kind, value, traceback, dump, minidump)
 
     def __stack_row_activated(self, view, path, column):
-        from quodlibet import util
         model = view.get_model()
         filename = model[path][0]
         line = model[path][2]
         util.spawn(["sensible-editor", "+%d" % line, filename])
 
     def __fill_list(self, view, model, value, trace):
-        from quodlibet import util
         for frame in reversed(traceback.extract_tb(trace)):
             (filename, line, function, text) = frame
             model.append(row=[filename, function, line])

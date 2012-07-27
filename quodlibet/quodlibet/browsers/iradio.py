@@ -35,6 +35,7 @@ from quodlibet.qltk.views import AllTreeView
 from quodlibet.qltk.searchbar import SearchBarBox
 from quodlibet.qltk.completion import LibraryTagCompletion
 from quodlibet.qltk.x import MenuItem
+from quodlibet.qltk.menubutton import MenuButton
 
 
 STATION_LIST_URL = "http://quodlibet.googlecode.com/files/radiolist.bz2"
@@ -432,22 +433,24 @@ class InternetRadio(gtk.VBox, Browser, util.InstanceTracker):
                                                  accel_group=self.accelerators)
         gobject_weak(search.connect, 'query-changed', self.__filter_changed)
 
+        menu = gtk.Menu()
+        new_item = MenuItem(_("_New Station"), gtk.STOCK_ADD)
+        gobject_weak(new_item.connect, 'activate', self.__add)
+        menu.append(new_item)
+        update_item = MenuItem(_("_Update Stations"), gtk.STOCK_REFRESH)
+        gobject_weak(update_item.connect, 'activate', self.__update)
+        menu.append(update_item)
+        menu.show_all()
+
+        button = MenuButton(
+            gtk.image_new_from_stock(
+                gtk.STOCK_PREFERENCES, gtk.ICON_SIZE_MENU),
+                arrow=True)
+        button.set_menu(menu)
+
         def focus(widget, *args):
             qltk.get_top_parent(widget).songlist.grab_focus()
         gobject_weak(search.connect, 'focus-out', focus, parent=self)
-
-        # alignment for search bar
-        search_align = gtk.Alignment(1, 1, 1, 1)
-        search_align.set_property('left-padding', 6)
-        search_align.add(search)
-
-        # left filter pane
-        self.__filter_pane = pane = gtk.VBox(spacing=6)
-
-        # new station button
-        add_button = qltk.Button(_("_New Station"),
-                                 gtk.STOCK_ADD, gtk.ICON_SIZE_MENU)
-        gobject_weak(add_button.connect, 'clicked', self.__add)
 
         # treeview
         scrolled_window = gtk.ScrolledWindow()
@@ -502,33 +505,28 @@ class InternetRadio(gtk.VBox, Browser, util.InstanceTracker):
         self.__changed_sig = gobject_weak(selection.connect, 'changed',
             util.DeferredSignal(lambda x: self.activate()), parent=view)
 
-        # update button
-        update_button = qltk.Button(_("_Update Stations"), gtk.STOCK_REFRESH,
-                             gtk.ICON_SIZE_MENU)
-        gobject_weak(update_button.connect, 'clicked', self.__update)
-
-
-        self.pack_start(search_align)
-        pane.pack_start(add_button, expand=False)
-        pane.pack_start(scrolled_window)
-        pane.pack_start(update_button, expand=False)
+        box = gtk.HBox(spacing=6)
+        box.pack_start(search)
+        box.pack_start(button, expand=False)
+        self.pack_start(box)
+        self.__filter_list = scrolled_window
 
         self.show_all()
 
     def pack(self, songpane):
-        container = qltk.RHPaned()
-        right = gtk.VBox(spacing=6)
-        container.pack1(self.__filter_pane, resize=False, shrink=False)
-        container.pack2(right, resize=True, shrink=False)
-        container.show_all()
-        right.pack_start(self, expand=False)
-        right.pack_start(songpane)
+        container = gtk.VBox(spacing=6)
+        pane = qltk.RHPaned()
+        pane.pack1(self.__filter_list, resize=False, shrink=False)
+        pane.show_all()
+        pane.pack2(songpane, resize=True, shrink=False)
+        container.pack_start(self, expand=False)
+        container.pack_start(pane)
         return container
 
     def unpack(self, container, songpane):
-        right = container.get_child2()
-        right.remove(songpane)
-        right.remove(self)
+        container.remove(self)
+        pane = container.get_children()[0]
+        pane.remove(songpane)
 
     def __update(self, *args):
         copool.add(download_taglist, self.__update_done,
@@ -702,34 +700,16 @@ class InternetRadio(gtk.VBox, Browser, util.InstanceTracker):
             self.__filter_changed(self.__searchbar, text, restore=True)
 
         keys = config.get("browsers", "radio").splitlines()
-        selection = self.view.get_selection()
-        model = self.view.get_model()
-        view = self.view
+        def select_func(row):
+            return row[self.TYPE] != self.TYPE_SEP and row[self.KEY] in keys
 
-        # get all paths that have a matching key, and the favorites
-        fav = None
-        found = []
-        for row in model:
-            if row[self.TYPE] != self.TYPE_SEP and row[self.KEY] in keys:
-                found.append(row.path)
-            if row[self.TYPE] == self.TYPE_FAV:
-                fav = row.path
-
-        # if nothing was found, default to favorites
-        if not found:
-            found.append(fav)
-
-        # select accordingly
         self.__inhibit()
-        selection.unselect_all()
-        first = True
-        for path in found:
-            if first:
-                view.scroll_to_cell(path, use_align=True, row_align=0.5)
-                view.set_cursor(path)
-                first = False
-            else:
-                selection.select_path(path)
+        view = self.view
+        if not view.select_by_func(select_func):
+            for row in view.get_model():
+                if row[self.TYPE] == self.TYPE_FAV:
+                    view.set_cursor(row.path)
+                    break
         self.__uninhibit()
 
     def __get_filter(self):

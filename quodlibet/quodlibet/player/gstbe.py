@@ -37,11 +37,8 @@ if 'QUODLIBET_PLAYBIN1' in os.environ:
     print_d("QUODLIBET_PLAYBIN1")
     USE_PLAYBIN2 = False
 
-USE_QUEUE = 'QUODLIBET_GSTBE_QUEUE' in os.environ
-if USE_QUEUE:
-    print_d("QUODLIBET_GSTBE_QUEUE")
-
 USE_TRACK_CHANGE = gst.version() >= (0, 10, 28)
+
 
 class GStreamerPlayer(BasePlayer):
     __gproperties__ = BasePlayer._gproperties_
@@ -74,21 +71,14 @@ class GStreamerPlayer(BasePlayer):
             config.set('player', 'gst_pipeline', entry.get_text())
         e.connect('changed', changed)
 
-        l = gtk.Label(_('_Output pipeline:'))
-        l.set_use_underline(True)
-        l.set_mnemonic_widget(e)
+        pipe_label = gtk.Label(_('_Output pipeline:'))
+        pipe_label.set_use_underline(True)
+        pipe_label.set_mnemonic_widget(e)
 
-        b = gtk.Button(stock=gtk.STOCK_APPLY)
-        b.connect_object('clicked', lambda x: x.__rebuild_pipeline(), self)
-
-        hb = gtk.HBox(spacing=6)
-        hb.pack_start(l, expand=False)
-        hb.pack_start(e)
-        hb.pack_start(b, expand=False)
+        apply_button = gtk.Button(stock=gtk.STOCK_APPLY)
 
         def format_buffer(scale, value):
-            # seconds
-            return _("%.1f s") % value
+            return _("%.1f seconds") % value
 
         def scale_changed(scale):
             config.set("player", "gst_buffer", scale.get_value())
@@ -103,18 +93,44 @@ class GStreamerPlayer(BasePlayer):
         scale.connect('format-value', format_buffer)
         scale.connect('value-changed', scale_changed)
 
-        l = gtk.Label(_('_Buffer duration:'))
-        l.set_use_underline(True)
-        l.set_mnemonic_widget(scale)
+        buffer_label = gtk.Label(_('_Buffer duration:'))
+        buffer_label.set_use_underline(True)
+        buffer_label.set_mnemonic_widget(scale)
 
-        hb2 = gtk.HBox(spacing=6)
-        hb2.pack_start(l, expand=False)
-        hb2.pack_start(scale)
+        device_combo = DeviceComboBox()
+
+        device_label = gtk.Label(_('_Output device:'))
+        device_label.set_use_underline(True)
+        device_label.set_mnemonic_widget(device_combo)
+
+        def rebuild_pipeline(combo):
+            combo.refresh()
+            self.__rebuild_pipeline()
+
+        apply_button.connect_object('clicked', rebuild_pipeline, device_combo)
+
+        widgets = [(pipe_label, e, apply_button),
+                   (device_label, device_combo, None),
+                   ]
+        if USE_PLAYBIN2:
+            widgets.append((buffer_label, scale, None))
+
+        table = gtk.Table(len(widgets), 3)
+        table.set_col_spacings(6)
+        table.set_row_spacings(6)
+        for i, (left, middle, right) in enumerate(widgets):
+            left.set_alignment(0.0, 0.5)
+            table.attach(left, 0, 1, i, i + 1,
+                         xoptions=gtk.FILL | gtk.SHRINK)
+            if right:
+                table.attach(middle, 1, 2, i, i + 1)
+                table.attach(right, 2, 3, i, i + 1,
+                             xoptions=gtk.FILL | gtk.SHRINK)
+            else:
+                table.attach(middle, 1, 3, i, i + 1)
 
         vbox = gtk.VBox(spacing=6)
-        vbox.pack_start(hb)
-        if USE_PLAYBIN2:
-            vbox.pack_start(hb2)
+        vbox.pack_start(table)
 
         if const.DEBUG:
             def print_bin(player):
@@ -174,21 +190,11 @@ class GStreamerPlayer(BasePlayer):
             pipeline = [filt, eq, conv] + pipeline
 
         if USE_PLAYBIN2:
-            prefix = []
-
-            if USE_QUEUE:
-                queue = gst.element_factory_make('queue')
-                queue.set_property('max-size-time', 500 * gst.MSECOND)
-                prefix.append(queue)
-
             # playbin2 has started to control the volume through pulseaudio,
             # which means the volume property can change without us noticing.
             # Use our own volume element for now until this works with PA.
-            # Also, when using the queue, this removes the delay..
             self._vol_element = gst.element_factory_make('volume')
-            prefix.append(self._vol_element)
-
-            pipeline = prefix + pipeline
+            pipeline.insert(0, self._vol_element)
 
         bufbin = gst.Bin()
         map(bufbin.add, pipeline)
@@ -208,6 +214,10 @@ class GStreamerPlayer(BasePlayer):
             bufbin.set_state(gst.STATE_NULL)
             self.__destroy_pipeline()
             return False
+
+        # Set the device
+        sink = pipeline[-1]
+        set_sink_device(sink)
 
         # Make the sink of the first element the sink of the bin
         gpad = gst.GhostPad('sink', pipeline[0].get_pad('sink'))

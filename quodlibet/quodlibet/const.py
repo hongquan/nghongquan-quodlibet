@@ -7,7 +7,7 @@ import locale
 if os.name == "nt":
     from win32com.shell import shellcon, shell
 
-VERSION_TUPLE = (2, 4, 0, -1)
+VERSION_TUPLE = (2, 4, -1)
 VERSION = ".".join(map(str, VERSION_TUPLE))
 PROCESS_TITLE_QL = "quodlibet"
 PROCESS_TITLE_EF = "exfalso"
@@ -138,13 +138,9 @@ MENU = """<ui>
       <menuitem action='RandomArtist'/>
       <menuitem action='RandomAlbum'/>
       <separator/>
-      <menuitem action='NotPlayedDay'/>
-      <menuitem action='NotPlayedWeek'/>
-      <menuitem action='NotPlayedMonth'/>
-      <menuitem action='NotPlayedEver'/>
-      <separator/>
-      <menuitem action='Top'/>
-      <menuitem action='Bottom'/>
+      <menuitem action='PlayedRecently'/>
+      <menuitem action='AddedRecently'/>
+      <menuitem action='TopRated'/>
     </menu>
     <menu action='Control'>
       <menuitem action='Previous'/>

@@ -22,6 +22,8 @@ from quodlibet.qltk.completion import LibraryValueCompletion
 from quodlibet.qltk.tagscombobox import TagsComboBox, TagsComboBoxEntry
 from quodlibet.qltk.views import RCMHintedTreeView
 from quodlibet.qltk.wlw import WritingWindow
+from quodlibet.qltk._editpane import EditingPluginHandler
+from quodlibet.plugins import PluginManager
 
 class AudioFileGroup(dict):
 
@@ -201,10 +203,6 @@ class SplitPerformerFromTitle(SplitPerson):
 
 class AddTagDialog(gtk.Dialog):
     def __init__(self, parent, can_change, library):
-        if can_change == True:
-            can = sorted(formats.USEFUL_TAGS)
-        else:
-            can = sorted(can_change)
         super(AddTagDialog, self).__init__(
             _("Add a Tag"), qltk.get_top_parent(parent))
         self.set_border_width(6)
@@ -310,7 +308,17 @@ def strip_missing(string):
     try: return string[:string.index(" <i>")]
     except ValueError: return string
 
+class EditTagsPluginHandler(EditingPluginHandler):
+    from quodlibet.plugins.editing import EditTagsPlugin
+    Kind = EditTagsPlugin
+
 class EditTags(gtk.VBox):
+    handler = EditTagsPluginHandler()
+
+    @classmethod
+    def init_plugins(cls):
+        PluginManager.instance.register_handler(cls.handler)
+
     def __init__(self, parent, library):
         super(EditTags, self).__init__(spacing=12)
         self.title = _("Edit Tags")
@@ -448,8 +456,6 @@ class EditTags(gtk.VBox):
 
     def __popup_menu(self, view, parent):
         menu = gtk.Menu()
-        spls = config.get("editing", "split_on").decode(
-            'utf-8', 'replace').split()
 
         view.ensure_popup_selection()
         model, rows = view.get_selection().get_selected_rows()
@@ -457,7 +463,7 @@ class EditTags(gtk.VBox):
 
         items = [SplitDisc, SplitTitle, SplitPerformer, SplitArranger,
                  SplitValues, SplitPerformerFromTitle]
-        items.extend(parent.plugins.EditTagsPlugins())
+        items.extend(self.handler.plugins)
         items.sort(key=lambda item: (item._order, item.__name__))
 
         if len(rows) == 1:
@@ -515,10 +521,6 @@ class EditTags(gtk.VBox):
             qltk.ErrorMessage(self, title, msg).run()
             return
 
-        edited = True
-        edit = True
-        orig = None
-        deleted = False
         iters = [row.iter for row in model if row[TAG] == tag]
         row = [tag, util.escape(value), True, True, False, None, False, None]
         if len(iters): model.insert_after(iters[-1], row=row)
@@ -640,6 +642,7 @@ class EditTags(gtk.VBox):
             if changed:
                 try: song.write()
                 except:
+                    util.print_exc()
                     qltk.ErrorMessage(
                         self, _("Unable to save song"),
                         _("Saving <b>%s</b> failed. The file "
@@ -708,7 +711,6 @@ class EditTags(gtk.VBox):
                 value = fmt.validate(v)
             else:
                 value = row[VALUE]
-                idx = value.find('<i>')
                 value = util.unescape(value)
 
             if row[ORIGVALUE] is None:

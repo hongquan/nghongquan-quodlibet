@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 # Copyright 2004-2005 Joe Wreschnig, Michael Urman
+#                2012 Nick Boultbee
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 as
@@ -9,8 +11,6 @@
 # more readable, unless they're also faster.
 
 import os
-import stat
-import glob
 import shutil
 import time
 import re
@@ -18,15 +18,12 @@ import re
 from quodlibet import const
 from quodlibet import util
 from quodlibet import config
-from ConfigParser import NoSectionError, NoOptionError
 
 from quodlibet.util.uri import URI
 from quodlibet.util import HashableDict
 from quodlibet.util import human_sort_key as human
 from quodlibet.util.tags import STANDARD_TAGS as USEFUL_TAGS
 from quodlibet.util.tags import MACHINE_TAGS
-from quodlibet.util.titlecase import title
-
 
 MIGRATE = frozenset(("~#playcount ~#laststarted ~#lastplayed ~#added "
            "~#skipcount ~#rating ~bookmark").split())
@@ -301,6 +298,11 @@ class AudioFile(dict):
             elif key == "#year":
                 try: return int(self.get("date", default)[:4])
                 except (ValueError, TypeError, KeyError): return default
+            elif key == "originalyear":
+                return self.get("originaldate", default)[:4]
+            elif key == "#originalyear":
+                try: return int(self.get("originaldate", default)[:4])
+                except (ValueError, TypeError, KeyError): return default
             elif key == "#tracks":
                 try: return int(self["tracknumber"].split("/")[1])
                 except (ValueError, IndexError, TypeError, KeyError):
@@ -313,6 +315,20 @@ class AudioFile(dict):
                 try: fileobj = file(self.lyric_filename, "rU")
                 except EnvironmentError: return default
                 else: return fileobj.read().decode("utf-8", "replace")
+            elif key == "playlists":
+                # See Issue 876
+                # Avoid circular references from formats/__init__.py
+                from quodlibet.formats._album import Playlist
+                try:
+                    start = time.time()
+                    playlists = Playlist.playlists_featuring(self)
+                    import random
+                    if not random.randint(0, 1000):
+                        print_d("A sample song('~playlists') call: took %d μs "
+                                % (1E6 * (time.time() - start)))
+                    return "\n".join([s.name for s in playlists])
+                except KeyError, e:
+                    return default
             elif key.startswith("#replaygain_"):
                 try:
                     val = self.get(key[1:], default)
@@ -347,7 +363,7 @@ class AudioFile(dict):
 
     lyric_filename = property(lambda self: util.fsencode(
         os.path.join(util.expanduser("~/.lyrics"),
-                     self.comma("artist").replace('/', '')[:128],
+                     (self.comma("lyricist") or self.comma("artist")).replace('/', '')[:128],
                      self.comma("title").replace('/', '')[:128] + '.lyric')))
 
     def comma(self, key):
@@ -581,10 +597,13 @@ class AudioFile(dict):
         ["scan", "scans", "images", "covers", "artwork"])
     __cover_exts = frozenset(["jpg", "jpeg", "png", "gif"])
 
-    __cover_positive = frozenset(["front", "cover", "jacket",
-        "folder", "albumart", "edited"])
+    __cover_positive_words = ["front", "cover", "frontcover", "jacket",
+            "folder", "albumart", "edited"]
+    __cover_positive_regexes = frozenset(
+            map(lambda s:re.compile(r'(\b|_)' + s + r'(\b|_)'),
+            __cover_positive_words))
     __cover_negative_regexes = frozenset(
-        map(lambda s:re.compile(r'(\b|_)' + s + r'(\b|_)'),
+            map(lambda s:re.compile(r'(\b|_|)' + s + r'(\b|_)'),
             ["back", "inlay", "inset", "inside"]))
 
     def find_cover(self):
@@ -637,14 +656,13 @@ class AudioFile(dict):
 
                 # Track-related keywords
                 keywords =  [k.lower().strip() for k in [self("artist"),
-                    self("albumartist"), self("album")] if len(k) > 1]
+                             self("albumartist"), self("album")] if len(k) > 1]
                 score += 2 * sum(map(lfn.__contains__, keywords))
 
                 # Generic keywords
-                score += 3 * sum(map(lfn.__contains__, self.__cover_positive))
+                score += 3 * sum(r.search(lfn) is not None
+                                 for r in self.__cover_positive_regexes)
 
-                # Negatives are word-boundary-wrapped
-                # This avoids problems like "Nickelback - front"
                 negs = sum(r.search(lfn) is not None
                            for r in self.__cover_negative_regexes)
                 score -= 2 * negs

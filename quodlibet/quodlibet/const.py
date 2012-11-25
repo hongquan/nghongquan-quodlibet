@@ -7,8 +7,11 @@ import locale
 if os.name == "nt":
     from win32com.shell import shellcon, shell
 
-VERSION_TUPLE = (2, 4, 91, -1)
+VERSION_TUPLE = (2, 5, -1)
 VERSION = ".".join(map(str, VERSION_TUPLE))
+PYTHON_MIN_VERSION = (2, 6)
+PYGTK_MIN_VERSION = (2, 16)
+
 PROCESS_TITLE_QL = "quodlibet"
 PROCESS_TITLE_EF = "exfalso"
 

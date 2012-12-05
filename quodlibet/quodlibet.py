@@ -71,9 +71,22 @@ def main():
     except (ValueError, TypeError): pass
     else: const.DEFAULT_RATING = default_rating
 
-    try: symbol = config.get("settings", "rating_symbol").decode("utf-8")
+    try: symbol = config.get("settings", "rating_symbol_full").decode("utf-8")
     except UnicodeDecodeError: pass
     else: util.RATING_SYMBOL = symbol
+
+    try: symbol = config.get("settings", "rating_symbol_blank").decode("utf-8")
+    except UnicodeDecodeError: pass
+    else: util.RATING_SYMBOL_BLANK = symbol
+
+    from quodlibet.util.collection import Album
+    try:
+        cover_size = config.getint("browsers", "cover_size")
+    except config.error:
+        pass
+    else:
+        if cover_size > 0:
+            Album.COVER_SIZE = cover_size
 
     if config.get("settings", "headers").split() == []:
        config.set("settings", "headers", "title")

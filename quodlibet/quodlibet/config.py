@@ -136,6 +136,7 @@ def init(*rc_files):
           "radio": "", # radio filter selection
           "rating_click": "true", # click to rate song, on/off
           "rating_confirm_multiple": "false", # confirm rating multiple songs
+          "cover_size": "-1", # max cover height/width, <= 0 is default
           },
 
         # Kind of a dumping ground right now, should probably be
@@ -145,7 +146,8 @@ def init(*rc_files):
           "jump": "true", # scroll song list on current song change
           "default_rating": "0.5", # initial rating of new song
           "ratings": "4", # maximum rating value
-          "rating_symbol": '\xe2\x99\xaa', # rating symbol (music note)
+          "rating_symbol_full": "\xe2\x98\x85",   # rating symbol (black star)
+          "rating_symbol_blank": "\xe2\x98\x86",  # rating symbol (hollow star)
 
           # probably belong in memory
           "repeat": "false",

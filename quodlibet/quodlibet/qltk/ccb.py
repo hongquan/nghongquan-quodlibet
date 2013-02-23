@@ -5,11 +5,11 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation
 
-import gtk
+from gi.repository import Gtk
 
 from quodlibet import config
 
-class ConfigCheckButton(gtk.CheckButton):
+class ConfigCheckButton(Gtk.CheckButton):
     """A CheckButton that connects to QL's config module, and toggles
     a boolean configuration value when it is toggled.
 
@@ -23,7 +23,7 @@ class ConfigCheckButton(gtk.CheckButton):
     def __toggled(self, section, option):
         config.set(section, option, str(bool(self.get_active())).lower())
 
-class ConfigCheckMenuItem(gtk.CheckMenuItem):
+class ConfigCheckMenuItem(Gtk.CheckMenuItem):
     """A CheckMenuItem that connects to QL's config module, and toggles
     a boolean configuration value when it is toggled.
 

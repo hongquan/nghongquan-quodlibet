@@ -6,9 +6,7 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation
 
-
-import gobject
-import gtk
+from gi.repository import Gtk, GObject
 
 from quodlibet import qltk
 from quodlibet import config
@@ -51,7 +49,8 @@ class BigCenteredImage(qltk.Window):
     def __destroy(self, *args):
         self.destroy()
 
-class ResizeImage(gtk.Image):
+
+class ResizeImage(Gtk.Image):
     """Automatically resizes to the maximum height given by its
     parent container. If resize is True, size and max will be ignored"""
     def __init__(self, resize, size=0, max=128):
@@ -123,7 +122,7 @@ class ResizeImage(gtk.Image):
         self.__ignore = False
         self.disconnect(self.__sig)
 
-class CoverImage(gtk.EventBox):
+class CoverImage(Gtk.EventBox):
 
     def __init__(self, resize=False, size=70, song=None):
         super(CoverImage, self).__init__()

@@ -1,7 +1,7 @@
 from tests import add, TestCase
 
 import os
-import gtk
+from gi.repository import Gtk
 
 from quodlibet import const
 from quodlibet import config
@@ -18,7 +18,8 @@ class TFSInterface(TestCase):
         self.fs = FSInterface(self.p)
 
     def do(self):
-        while gtk.events_pending(): gtk.main_iteration()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
     def test_init(self):
         self.do()
@@ -48,7 +49,7 @@ class TFIFOControl(TestCase):
         config.init()
         self.p = NullPlayer()
         self.l = SongFileLibrary()
-        self.w = gtk.Window()
+        self.w = Gtk.Window()
         self.fifo = FIFOControl(self.l, self.w, self.p)
 
     def tearDown(self):
@@ -61,8 +62,8 @@ class TFIFOControl(TestCase):
         f = open(const.CONTROL, "wb")
         f.write(command)
         f.close()
-        while gtk.events_pending():
-            gtk.main_iteration()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
     def test_player(self):
         self.__send("previous")

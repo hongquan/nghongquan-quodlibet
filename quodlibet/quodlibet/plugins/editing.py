@@ -5,7 +5,8 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation
 
-import gtk
+from gi.repository import Gtk
+
 
 class RenameFilesPlugin(object):
     """Plugins of this type must subclass a GTK widget. They will be
@@ -72,7 +73,7 @@ class TagsFromPathPlugin(object):
         return (cmp(self._order, other._order) or
                 cmp(type(self).__name__, type(other).__name__))
 
-class EditTagsPlugin(gtk.ImageMenuItem):
+class EditTagsPlugin(Gtk.ImageMenuItem):
     """Plugins of this type are subclasses of gtk.ImageMenuItem.
     They will be added to the context menu of the EditTags tree view.
 

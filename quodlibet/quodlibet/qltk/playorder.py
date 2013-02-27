@@ -6,7 +6,7 @@
 
 import random
 
-import gtk
+from gi.repository import Gtk
 
 from quodlibet import config
 from quodlibet.plugins import PluginManager
@@ -177,14 +177,9 @@ def set_orders(orders):
                 cmp(K1.priority, K2.priority) or cmp(K1.name, K2.name))
 set_orders([])
 
-class PlayOrder(gtk.ComboBox):
+class PlayOrder(Gtk.ComboBoxText):
     def __init__(self, model, player):
-        super(PlayOrder, self).__init__(gtk.ListStore(str))
-        cell = gtk.CellRendererText()
-        cell.props.xpad = 1
-        cell.props.ypad = 0
-        self.pack_start(cell, True)
-        self.add_attribute(cell, 'text', 0)
+        super(PlayOrder, self).__init__()
 
         self.__plugins = []
         if PluginManager.instance:

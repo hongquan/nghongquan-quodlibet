@@ -8,8 +8,8 @@
 
 import os
 
-import gtk
-import pango
+from gi.repository import Gtk
+from gi.repository import Pango
 
 from quodlibet import const
 from quodlibet import qltk
@@ -23,7 +23,7 @@ from quodlibet.parse import XMLFromPattern
 from quodlibet.qltk.textedit import PatternEdit
 
 
-class SongInfo(gtk.Label):
+class SongInfo(Gtk.Label):
     _pattern = """\
 \\<span weight='bold' size='large'\\><title>\\</span\\>\
 <~length| (<~length>)><version|
@@ -41,7 +41,7 @@ class SongInfo(gtk.Label):
 
     def __init__(self, library, player):
         super(SongInfo, self).__init__()
-        self.set_ellipsize(pango.ELLIPSIZE_MIDDLE)
+        self.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
         self.set_selectable(True)
         self.set_alignment(0.0, 0.0)
         library.connect_object('changed', self.__check_change, player)
@@ -55,24 +55,24 @@ class SongInfo(gtk.Label):
 
     def __menu(self, player, menu, library):
         try:
-            # Get a real sub-menu, unless there's no song, in which case an
+            # Get a real submenu, unless there's no song, in which case an
             # empty one looks more consistent than None
             submenu = (browsers.playlists.Menu([player.song], player)
-                       if player.song else gtk.Menu())
+                       if player.song else Gtk.Menu())
         except AttributeError, e:
             print_d(e)
         else:
-            b = qltk.MenuItem(_("_Add to Playlist"), gtk.STOCK_ADD)
+            b = qltk.MenuItem(_("_Add to Playlist"), Gtk.STOCK_ADD)
             b.set_sensitive(player.song is not None and player.song.can_add)
             b.set_submenu(submenu)
             b.show_all()
-            sep = gtk.SeparatorMenuItem()
+            sep = Gtk.SeparatorMenuItem()
             menu.prepend(sep)
             sep.show()
             menu.prepend(b)
 
         # Issue 298 - Rate current playing song
-        sep = gtk.SeparatorMenuItem()
+        sep = Gtk.SeparatorMenuItem()
         menu.prepend(sep)
         sep.show()
         rating = RatingsMenuItem([player.song], library)
@@ -80,23 +80,23 @@ class SongInfo(gtk.Label):
         rating.show()
         menu.prepend(rating)
 
-        item = qltk.MenuItem(_("_Edit Display..."), gtk.STOCK_EDIT)
+        item = qltk.MenuItem(_("_Edit Display..."), Gtk.STOCK_EDIT)
         item.show()
         item.connect_object('activate', self.__edit, player)
         menu.append(item)
 
-        sep = gtk.SeparatorMenuItem()
+        sep = Gtk.SeparatorMenuItem()
         menu.append(sep)
         sep.show()
-        props = qltk.MenuItem(_("Edit _Tags"), gtk.STOCK_PROPERTIES)
-        props.connect_object('activate', SongProperties, library,
-                             [player.song], self)
+        props = qltk.MenuItem(_("Edit _Tags"), Gtk.STOCK_PROPERTIES)
+        props.connect_object(
+            'activate', SongProperties, library, [player.song], self)
         props.show()
         props.set_sensitive(bool(player.song))
         menu.append(props)
-        info = gtk.ImageMenuItem(gtk.STOCK_INFO)
-        info.connect_object('activate', Information, library,
-                            [player.song], self)
+        info = Gtk.ImageMenuItem(Gtk.STOCK_INFO, use_stock=True)
+        info.connect_object(
+            'activate', Information, library, [player.song], self)
         info.show()
         menu.append(info)
         info.set_sensitive(bool(player.song))

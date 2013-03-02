@@ -4,17 +4,45 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation
 
-import pygst
-pygst.require("0.10")
-
-import gtk
-import gst
-import gobject
+from gi.repository import Gtk, GLib, Gst
 
 from quodlibet import util
 from quodlibet import config
 from quodlibet.plugins.gstelement import GStreamerPlugin
 from quodlibet.plugins import PluginManager
+
+
+def link_many(elements):
+    last = None
+    for element in elements:
+        if last:
+            if not Gst.Element.link(last, element):
+                return False
+        last = element
+    return True
+
+
+def unlink_many(elements):
+    last = None
+    for element in elements:
+        if last:
+            if not Gst.Element.unlink(last, element):
+                return False
+        last = element
+    return True
+
+
+def recurse_bin(element):
+    objects = [element]
+
+    iter_ = element.iterate_recurse()
+    while 1:
+        status, value = iter_.next()
+        if status == Gst.IteratorResult.OK:
+            objects.append(value)
+        else:
+            break
+    return objects
 
 
 def GStreamerSink(pipeline):
@@ -26,27 +54,24 @@ def GStreamerSink(pipeline):
 
     Returns the pipeline's description and a list of disconnected elements."""
 
-    if not pipeline and not gst.element_factory_find('gconfaudiosink'):
+    if not pipeline and not Gst.ElementFactory.find('gconfaudiosink'):
         pipeline = "autoaudiosink"
     elif not pipeline or pipeline == "gconf":
         pipeline = "gconfaudiosink profile=music"
 
-    try: pipe = [gst.parse_launch(element) for element in pipeline.split('!')]
-    except gobject.GError:
+    try: pipe = [Gst.parse_launch(element) for element in pipeline.split('!')]
+    except GLib.GError:
         print_w(_("Invalid GStreamer output pipeline, trying default."))
-        try: pipe = [gst.parse_launch("autoaudiosink")]
-        except gobject.GError: pipe = None
+        try: pipe = [Gst.parse_launch("autoaudiosink")]
+        except GLib.GError: pipe = None
         else: pipeline = "autoaudiosink"
 
     if pipe:
         # In case the last element is linkable with a fakesink
         # it is not an audiosink, so we append the default pipeline
-        fake = gst.element_factory_make('fakesink')
-        try:
-            gst.element_link_many(pipe[-1], fake)
-        except gst.LinkError: pass
-        else:
-            gst.element_unlink_many(pipe[-1], fake)
+        fake = Gst.ElementFactory.make('fakesink', None)
+        if link_many([pipe[-1], fake]):
+            unlink_many([pipe[-1], fake])
             default, default_text = GStreamerSink("")
             if default:
                 return pipe + default, pipeline + " ! "  + default_text
@@ -117,19 +142,19 @@ class GStreamerPluginHandler(object):
             plugin.update_element(self.__elements[plugin])
 
 
-class DeviceComboBox(gtk.ComboBox):
+class DeviceComboBox(Gtk.ComboBox):
     """A ComboBox that is prefilled with all possible devices
     of the pipeline."""
 
     DEVICE, NAME = range(2)
 
     def __init__(self):
-        model = gtk.ListStore(str, str)
-        super(DeviceComboBox, self).__init__(model)
+        model = Gtk.ListStore(str, str)
+        super(DeviceComboBox, self).__init__(model=model)
 
-        cell = gtk.CellRendererText()
+        cell = Gtk.CellRendererText()
         self.pack_start(cell, True)
-        self.set_cell_data_func(cell, self.__draw_device)
+        self.set_cell_data_func(cell, self.__draw_device, None)
 
         self.__sig = self.connect_object(
             'changed', self.__device_changed, model)
@@ -177,12 +202,12 @@ class DeviceComboBox(gtk.ComboBox):
             return
 
         sink = pipeline[-1]
-        sink.set_state(gst.STATE_READY)
+        sink.set_state(Gst.State.READY)
 
         base_sink = sink
 
-        if isinstance(sink, gst.Bin):
-            sink = list(sink.recurse())[-1]
+        if isinstance(sink, Gst.Bin):
+            sink = recurse_bin(sink)[-1]
 
         if hasattr(sink, "probe_property_name"):
             sink.probe_property_name("device")
@@ -192,14 +217,14 @@ class DeviceComboBox(gtk.ComboBox):
                 sink.set_property("device", dev)
                 model.append(row=[dev, sink.get_property("device-name")])
 
-        base_sink.set_state(gst.STATE_NULL)
-        base_sink.get_state()
+        base_sink.set_state(Gst.State.NULL)
+        base_sink.get_state(0)
 
     def __device_changed(self, model):
         row = model[self.get_active_iter()]
         config.set("player", "gst_device", row[self.DEVICE])
 
-    def __draw_device(self, column, cell, model, it):
+    def __draw_device(self, column, cell, model, it, data):
         cell.set_property('text', model[it][self.NAME])
 
 

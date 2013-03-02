@@ -37,7 +37,7 @@ class TComboBoxEntrySave(TestCase):
             self.failUnlessEqual(row1[2], row2[2])
 
     def test_shared_model(self):
-        self.cbes.append_text("a test")
+        self.cbes.prepend_text("a test")
         self.test_equivalence()
 
     def test_initial_size(self):
@@ -55,7 +55,7 @@ class TComboBoxEntrySave(TestCase):
         self.failUnlessEqual(self.saved, file(self.fname + ".saved").read())
 
     def test_set_text_then_prepend(self):
-        self.cbes.child.set_text("foobar")
+        self.cbes.get_child().set_text("foobar")
         self.cbes.prepend_text("foobar")
         self.memory = "foobar\npattern 1\n"
         self.test_save()

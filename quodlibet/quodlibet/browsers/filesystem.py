@@ -12,7 +12,7 @@
 
 import os
 
-import gtk
+from gi.repository import Gtk, Gdk
 
 from quodlibet import config
 from quodlibet import formats
@@ -28,7 +28,7 @@ from quodlibet.util import copool, split_scan_dirs
 from quodlibet.util.dprint import print_d
 from quodlibet.util.uri import URI
 
-class FileSystem(Browser, gtk.HBox):
+class FileSystem(Browser, Gtk.HBox):
     __gsignals__ = Browser.__gsignals__
 
     expand = qltk.RHPaned
@@ -40,9 +40,9 @@ class FileSystem(Browser, gtk.HBox):
 
     TARGET_QL, TARGET_EXT = range(1,3)
 
+    @classmethod
     def __added(klass, library, songs):
         klass.__library.remove(songs)
-    __added = classmethod(__added)
 
     @classmethod
     def init(klass, library):
@@ -58,15 +58,18 @@ class FileSystem(Browser, gtk.HBox):
     def __init__(self, library, main):
         super(FileSystem, self).__init__()
         sw = ScrolledWindow()
-        sw.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-        sw.set_shadow_type(gtk.SHADOW_IN)
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.set_shadow_type(Gtk.ShadowType.IN)
 
         folders = filter(None, split_scan_dirs(config.get("settings", "scan")))
 
         dt = DirectoryTree(folders=folders)
-        targets = [("text/x-quodlibet-songs", gtk.TARGET_SAME_APP, self.TARGET_QL),
+        targets = [("text/x-quodlibet-songs", Gtk.TargetFlags.SAME_APP, self.TARGET_QL),
                    ("text/uri-list", 0, self.TARGET_EXT)]
-        dt.drag_source_set(gtk.gdk.BUTTON1_MASK, targets, gtk.gdk.ACTION_COPY)
+        targets = [Gtk.TargetEntry.new(*t) for t in targets]
+
+        dt.drag_source_set(Gdk.ModifierType.BUTTON1_MASK,
+                           targets, Gdk.DragAction.COPY)
         dt.connect('drag-data-get', self.__drag_data_get)
 
         sel = dt.get_selection()
@@ -75,11 +78,11 @@ class FileSystem(Browser, gtk.HBox):
         if main:
             dt.connect('row-activated', lambda *a: self.emit("activated"))
         sw.add(dt)
-        self.pack_start(sw)
+        self.pack_start(sw, True, True, 0)
+
         self.show_all()
 
-    @property
-    def child(self):
+    def get_child(self):
         return self.get_children()[0].get_child()
 
     def __drag_data_get(self, view, ctx, sel, tid, etime):
@@ -110,8 +113,8 @@ class FileSystem(Browser, gtk.HBox):
         return key == "~dirname"
 
     def filter(self, key, values):
-        self.child.get_selection().unselect_all()
-        for v in values: self.child.go_to(v)
+        self.get_child().get_selection().unselect_all()
+        for v in values: self.get_child().go_to(v)
 
     def scroll(self, song):
         self.__select_paths([song("~dirname")])
@@ -127,33 +130,35 @@ class FileSystem(Browser, gtk.HBox):
     def __select_paths(self, paths):
         def select(model, path, iter, (paths, first)):
             if model[iter][0] in paths:
-                self.child.get_selection().select_path(path)
+                self.get_child().get_selection().select_path(path)
                 paths.remove(model[iter][0])
                 if not first:
-                    self.child.set_cursor(path)
+                    self.get_child().set_cursor(path)
                     first.append(path)
             else:
                 for fpath in paths:
                     if model[path][0] and fpath.startswith(model[path][0]):
-                        self.child.expand_row(path, False)
+                        self.get_child().expand_row(path, False)
             return not bool(paths)
         first = []
-        self.child.get_model().foreach(select, (paths, first))
-        if first: self.child.scroll_to_cell(first[0], None, True, 0.5)
+        self.get_child().get_model().foreach(select, (paths, first))
+        # FIXME: PGIPORT .. segfaults
+        #if first:
+        #    self.get_child().scroll_to_cell(first[0], None, True, 0.5)
 
     def save(self):
-        model, rows = self.child.get_selection().get_selected_rows()
+        model, rows = self.get_child().get_selection().get_selected_rows()
         paths = "\n".join([model[row][0] for row in rows])
         config.set("browsers", "filesystem", paths)
 
     def activate(self):
-        copool.add(self.__songs_selected, self.child)
+        copool.add(self.__songs_selected, self.get_child())
 
     def Menu(self, songs, songlist, library):
         menu = SongsMenu(library, songs, remove=self.__remove_songs,
                          delete=True, accels=songlist.accelerators,
                          parent=self)
-        i = qltk.MenuItem(_("_Add to Library"), gtk.STOCK_ADD)
+        i = qltk.MenuItem(_("_Add to Library"), Gtk.STOCK_ADD)
         i.set_sensitive(False)
         i.connect('activate', self.__add_songs, songs)
         for song in songs:
@@ -201,12 +206,12 @@ class FileSystem(Browser, gtk.HBox):
         yield songs
 
     def __songs_selected(self, view):
-        if self.window:
-            self.window.set_cursor(gtk.gdk.Cursor(gtk.gdk.WATCH))
+        if self.get_window():
+            self.get_window().set_cursor(Gdk.Cursor.new(Gdk.CursorType.WATCH))
         for songs in self.__find_songs(view.get_selection()):
             yield True
-        if self.window:
-            self.window.set_cursor(None)
+        if self.get_window():
+            self.get_window().set_cursor(None)
         self.emit('songs-selected', songs, None)
 
 browsers = [FileSystem]

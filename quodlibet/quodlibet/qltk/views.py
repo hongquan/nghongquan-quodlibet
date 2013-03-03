@@ -5,14 +5,13 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation
 
-import gobject
-import gtk
-import pango
+from gi.repository import Gtk, Gdk, GObject, Pango, GLib
 
 from quodlibet import config
 from quodlibet.qltk import get_top_parent, is_accel
 
-class TreeViewHints(gtk.Window):
+
+class TreeViewHints(Gtk.Window):
     """Handle 'hints' for treeviews. This includes expansions of truncated
     columns, and in the future, tooltips."""
 
@@ -21,29 +20,31 @@ class TreeViewHints(gtk.Window):
     # will never be called.
     __gsignals__ = dict.fromkeys(
         ['button-press-event', 'button-release-event',
-        'motion-notify-event', 'leave-notify-event', 'scroll-event'],
+        'motion-notify-event', 'scroll-event'],
         'override')
 
     def __init__(self):
-        super(TreeViewHints, self).__init__(gtk.WINDOW_POPUP)
-        self.__label = label = gtk.Label()
+        super(TreeViewHints, self).__init__(Gtk.WindowType.POPUP)
+        self.__label = label = Gtk.Label()
         label.set_alignment(0, 0.5)
         label.show()
-        label.set_ellipsize(pango.ELLIPSIZE_NONE)
+        label.set_ellipsize(Pango.EllipsizeMode.NONE)
         self.add(label)
 
-        self.add_events(gtk.gdk.BUTTON_MOTION_MASK |
-            gtk.gdk.BUTTON_PRESS_MASK | gtk.gdk.BUTTON_RELEASE_MASK |
-            gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK |
-            gtk.gdk.ENTER_NOTIFY_MASK | gtk.gdk.LEAVE_NOTIFY_MASK |
-            gtk.gdk.SCROLL_MASK | gtk.gdk.POINTER_MOTION_MASK |
-            gtk.gdk.POINTER_MOTION_HINT_MASK)
+        self.add_events(Gdk.EventMask.BUTTON_MOTION_MASK |
+            Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK |
+            Gdk.EventMask.KEY_PRESS_MASK | Gdk.EventMask.KEY_RELEASE_MASK |
+            Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK |
+            Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.POINTER_MOTION_MASK |
+            Gdk.EventMask.POINTER_MOTION_HINT_MASK)
+
+        context = self.get_style_context()
+        context.add_class("tooltip")
 
         self.set_app_paintable(True)
         self.set_resizable(False)
         self.set_name("gtk-tooltips")
         self.set_border_width(1)
-        self.connect('expose-event', self.__expose)
         self.connect('leave-notify-event', self.__undisplay)
 
         self.__handlers = {}
@@ -72,12 +73,6 @@ class TreeViewHints(gtk.Window):
         if view is self.__view:
             self.__undisplay()
 
-    def __expose(self, widget, event):
-        w, h = self.get_size_request()
-        self.style.paint_flat_box(self.window,
-                gtk.STATE_NORMAL, gtk.SHADOW_OUT,
-                None, self, "tooltip", 0, 0, w, h)
-
     def __motion(self, view, event):
         label = self.__label
 
@@ -87,7 +82,7 @@ class TreeViewHints(gtk.Window):
             return
 
         # hide if any modifier is active
-        if event.state & gtk.accelerator_get_default_mod_mask():
+        if event.get_state() & Gtk.accelerator_get_default_mod_mask():
             self.__undisplay()
             return
 
@@ -112,7 +107,7 @@ class TreeViewHints(gtk.Window):
             return
 
         # get the renderer at the mouse position and get the xpos/width
-        renderers = col.get_cell_renderers()
+        renderers = col.get_cells()
         pos = sorted(zip(map(col.cell_get_position, renderers), renderers))
         pos = filter(lambda ((x, w), r): x < cellx, pos)
         if not pos:
@@ -126,9 +121,9 @@ class TreeViewHints(gtk.Window):
             self.__undisplay()
 
         # only ellipsized text renderers
-        if not isinstance(renderer, gtk.CellRendererText):
+        if not isinstance(renderer, Gtk.CellRendererText):
             return
-        if renderer.get_property('ellipsize') == pango.ELLIPSIZE_NONE:
+        if renderer.get_property('ellipsize') == Pango.EllipsizeMode.NONE:
             return
 
         # set the cell renderer attributes for the active cell
@@ -163,7 +158,7 @@ class TreeViewHints(gtk.Window):
         # the column header height
         header_height = view.get_bin_window().get_position()[1]
 
-        ox, oy = view.window.get_origin()
+        dummy, ox, oy = view.get_window().get_origin()
 
         # save for adjusting passthrough events
         self.__dx, self.__dy = area.x + render_offset, area.y
@@ -176,12 +171,12 @@ class TreeViewHints(gtk.Window):
 
         # clip on the right if it's bigger than the screen
         screen_border = 5  # leave some space
-        space_right = gtk.gdk.screen_width() - x - w - screen_border
+        space_right = Gdk.Screen.width() - x - w - screen_border
         if space_right < 0:
             w += space_right
-            label.set_ellipsize(pango.ELLIPSIZE_END)
+            label.set_ellipsize(Pango.EllipsizeMode.END)
         else:
-            label.set_ellipsize(pango.ELLIPSIZE_NONE)
+            label.set_ellipsize(Pango.EllipsizeMode.NONE)
 
         # Don't show if the resulting tooltip would be smaller
         # than the visible area (if not all is on the display)
@@ -224,27 +219,35 @@ class TreeViewHints(gtk.Window):
             return True
 
         # hack: present the main window on key press
-        if event.type == gtk.gdk.BUTTON_PRESS:
+        if event.type == Gdk.EventType.BUTTON_PRESS:
             # hack: present is overridden to present all windows.
             # bypass to only select one
-            gtk.Window.present(get_top_parent(self.__view))
+            Gtk.Window.present(get_top_parent(self.__view))
 
-        if event.type != gtk.gdk.SCROLL:
-            event.x += self.__dx
-            event.y += self.__dy
+        type_ = event.type
+        real_event = None
+        if type_ == Gdk.EventType.BUTTON_PRESS:
+            real_event = event.button
+        elif type_ == Gdk.EventType.BUTTON_RELEASE:
+            real_event = event.button
+        elif type_ == Gdk.EventType.MOTION_NOTIFY:
+            real_event = event.motion
+
+        if real_event:
+            real_event.x += self.__dx
+            real_event.y += self.__dy
 
         # modifying event.window is a necessary evil, made okay because
         # nobody else should tie to any TreeViewHints events ever.
-        event.window = self.__view.get_bin_window()
+        event.any.window = self.__view.get_bin_window()
 
-        gtk.main_do_event(event)
+        event.put()
 
         return True
 
     def do_button_press_event(self, event): return self.__event(event)
     def do_button_release_event(self, event): return self.__event(event)
     def do_motion_notify_event(self, event): return self.__event(event)
-    def do_leave_notify_event(self, event): return self.__event(event)
     def do_scroll_event(self, event): return self.__event(event)
 
 
@@ -290,21 +293,21 @@ class DragScroll(object):
             self.set_drag_dest(wx, wy)
             # we have to re-add the timeout.. otherwise they could add up
             # because scroll can last longer than 50ms
-            gobject.source_remove(self.__scroll_periodic)
+            GLib.source_remove(self.__scroll_periodic)
             enable_periodic_scroll()
 
         def enable_periodic_scroll():
-            self.__scroll_periodic = gobject.timeout_add(50, periodic_scroll)
+            self.__scroll_periodic = GLib.timeout_add(50, periodic_scroll)
 
-        self.__scroll_delay = gobject.timeout_add(350, enable_periodic_scroll)
+        self.__scroll_delay = GLib.timeout_add(350, enable_periodic_scroll)
 
     def scroll_disable(self):
         """Disable all scrolling"""
         if self.__scroll_periodic is not None:
-            gobject.source_remove(self.__scroll_periodic)
+            GLib.source_remove(self.__scroll_periodic)
             self.__scroll_periodic = None
         if self.__scroll_delay is not None:
-            gobject.source_remove(self.__scroll_delay)
+            GLib.source_remove(self.__scroll_delay)
             self.__scroll_delay = None
         self.__scroll_length = 0
         self.__scroll_last = None
@@ -360,7 +363,7 @@ class DragScroll(object):
             self.__enable_scroll()
 
 
-class BaseView(gtk.TreeView):
+class BaseView(Gtk.TreeView):
 
     def __init__(self, *args, **kwargs):
         super(BaseView, self).__init__(*args, **kwargs)
@@ -405,17 +408,17 @@ class BaseView(gtk.TreeView):
 
         selection = self.get_selection()
         mode = selection.get_mode()
-        if mode in (gtk.SELECTION_SINGLE, gtk.SELECTION_BROWSE):
+        if mode in (Gtk.SelectionMode.SINGLE, Gtk.SelectionMode.BROWSE):
             model, iter_ = selection.get_selected()
             if iter_:
                 self.__remove_iters([iter_], force_restore=True)
-        elif mode == gtk.SELECTION_MULTIPLE:
+        elif mode == Gtk.SelectionMode.MULTIPLE:
             model, paths = selection.get_selected_rows()
             iters = map(model.get_iter, paths or [])
             self.__remove_iters(iters, force_restore=True)
 
     def select_by_func(self, func, scroll=True, one=False):
-        """Calls func with every gtk.TreeModelRow in the model and selects
+        """Calls func with every Gtk.TreeModelRow in the model and selects
         it if func returns True. In case func never returned True,
         the selection will not be changed.
 
@@ -446,7 +449,7 @@ class BaseView(gtk.TreeView):
             if not rows:
                 (self.get_parent() or self).drag_highlight()
             else:
-                self.set_drag_dest_row(rows - 1, gtk.TREE_VIEW_DROP_AFTER)
+                self.set_drag_dest_row(rows - 1, Gtk.TreeViewDropPosition.AFTER)
         else:
             self.set_drag_dest_row(*dest_row)
 
@@ -498,17 +501,17 @@ class MultiDragTreeView(BaseView):
         self.grab_focus()
         selection = self.get_selection()
         if ((selection.path_is_selected(path)
-            and not (event.state & (gtk.gdk.CONTROL_MASK|gtk.gdk.SHIFT_MASK)))):
+            and not (event.get_state() & (Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK)))):
             self.__pending_event = [x, y]
-            selection.set_select_function(lambda *args: False)
-        elif event.type == gtk.gdk.BUTTON_PRESS:
+            selection.set_select_function(lambda *args: False, None)
+        elif event.type == Gdk.EventType.BUTTON_PRESS:
             self.__pending_event = None
-            selection.set_select_function(lambda *args: True)
+            selection.set_select_function(lambda *args: True, None)
 
     def __button_release(self, event):
         if self.__pending_event:
             selection = self.get_selection()
-            selection.set_select_function(lambda *args: True)
+            selection.set_select_function(lambda *args: True, None)
             oldevent = self.__pending_event
             self.__pending_event = None
             if oldevent != [event.x, event.y]: return True
@@ -525,9 +528,9 @@ class MultiDragTreeView(BaseView):
             height = (
                 sum(map(lambda s: s.get_size()[1], icons))-2*len(icons))+2
             width = max(map(lambda s: s.get_size()[0], icons))
-            final = gtk.gdk.Pixmap(icons[0], width, height)
-            gc = gtk.gdk.GC(final)
-            gc.copy(self.style.fg_gc[gtk.STATE_NORMAL])
+            final = Gdk.Pixmap(icons[0], width, height)
+            gc = Gdk.GC(final)
+            gc.copy(self.style.fg_gc[Gtk.StateType.NORMAL])
             gc.set_colormap(self.window.get_colormap())
             count_y = 1
             for icon in icons:
@@ -536,23 +539,23 @@ class MultiDragTreeView(BaseView):
                 count_y += h - 2
             if len(paths) > MAX:
                 count_y -= h - 2
-                bgc = gtk.gdk.GC(final)
-                bgc.copy(self.style.base_gc[gtk.STATE_NORMAL])
+                bgc = Gdk.GC(final)
+                bgc.copy(self.style.base_gc[Gtk.StateType.NORMAL])
                 final.draw_rectangle(bgc, True, 1, count_y, w-2, h-2)
                 more = _("and %d more...") % (len(paths) - MAX + 1)
                 layout = self.create_pango_layout(more)
-                attrs = pango.AttrList()
-                attrs.insert(pango.AttrStyle(pango.STYLE_ITALIC, 0, len(more)))
+                attrs = Pango.AttrList()
+                attrs.insert(Pango.AttrStyle(Pango.Style.ITALIC, 0, len(more)))
                 layout.set_attributes(attrs)
-                layout.set_width(pango.SCALE * (w - 2))
+                layout.set_width(Pango.SCALE * (w - 2))
                 lw, lh = layout.get_pixel_size()
                 final.draw_layout(gc, (w-lw)//2, count_y + (h-lh)//2, layout)
 
             final.draw_rectangle(gc, False, 0, 0, width-1, height-1)
             self.drag_source_set_icon(final.get_colormap(), final)
         else:
-            gobject.idle_add(ctx.drag_abort, gtk.get_current_event_time())
-            self.drag_source_set_icon_stock(gtk.STOCK_MISSING_IMAGE)
+            GLib.idle_add(ctx.drag_abort, Gtk.get_current_event_time())
+            self.drag_source_set_icon_stock(Gtk.STOCK_MISSING_IMAGE)
 
 class RCMTreeView(BaseView):
     """Emits popup-menu when a row is right-clicked on."""
@@ -563,7 +566,8 @@ class RCMTreeView(BaseView):
             'button-press-event', RCMTreeView.__button_press, self)
 
     def __button_press(self, event):
-        if event.button == 3: return self.__check_popup(event)
+        if event.button == 3:
+            return self.__check_popup(event)
 
     def __check_popup(self, event):
         x, y = map(int, [event.x, event.y])
@@ -574,7 +578,7 @@ class RCMTreeView(BaseView):
         if not selection.path_is_selected(path):
             self.set_cursor(path, col, 0)
         else:
-            col.focus_cell(col.get_cell_renderers()[0])
+            col.focus_cell(col.get_cells()[0])
         self.__position_at_mouse = True
         self.emit('popup-menu')
         return True
@@ -605,7 +609,7 @@ class RCMTreeView(BaseView):
         else:
             pos_func = None
 
-        menu.popup(None, None, pos_func, button, time)
+        menu.popup(None, None, pos_func, None, button, time)
         return True
 
     def __popup_position(self, menu):
@@ -623,14 +627,14 @@ class RCMTreeView(BaseView):
         dy += self.get_bin_window().get_position()[1]
 
         # fit menu to screen, aligned per text direction
-        screen_width = gtk.gdk.screen_width()
-        screen_height = gtk.gdk.screen_height()
+        screen_width = Gdk.Screen.width()
+        screen_height = Gdk.Screen.height()
         menu.realize()
         ma = menu.allocation
         menu_y = rect.y + rect.height + dy
         if menu_y + ma.height > screen_height and rect.y + dy - ma.height > 0:
             menu_y = rect.y + dy - ma.height
-        if gtk.widget_get_default_direction() == gtk.TEXT_DIR_LTR:
+        if Gtk.widget_get_default_direction() == Gtk.TextDirection.LTR:
             menu_x = min(rect.x + dx, screen_width - ma.width)
         else:
             menu_x = max(0, rect.x + dx - ma.width + rect.width)
@@ -649,17 +653,17 @@ class HintedTreeView(BaseView):
             tvh.connect_view(self)
 
 
-class TreeViewColumn(gtk.TreeViewColumn):
+class TreeViewColumn(Gtk.TreeViewColumn):
     def __init__(self, title="", *args, **kwargs):
         super(TreeViewColumn, self).__init__(None, *args, **kwargs)
-        label = gtk.Label(title)
+        label = Gtk.Label(label=title)
         label.set_padding(1, 1)
         label.show()
         self.set_widget(label)
 
     def set_use_markup(self, value):
         widget = self.get_widget()
-        if isinstance(widget, gtk.Label):
+        if isinstance(widget, Gtk.Label):
             widget.set_use_markup(value)
 
 
@@ -668,9 +672,9 @@ class TreeViewColumnButton(TreeViewColumn):
         button-press-event and popup-menu"""
 
     __gsignals__ = {
-        'button-press-event': (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+        'button-press-event': (GObject.SignalFlags.RUN_LAST, None,
                 (object,)),
-        'popup-menu':  (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, ()),
+        'popup-menu':  (GObject.SignalFlags.RUN_LAST, None, ()),
     }
 
     def __init__(self, title="", *args, **kw):
@@ -681,7 +685,7 @@ class TreeViewColumnButton(TreeViewColumn):
     def __connect_menu_event(self, widget):
         widget.disconnect(widget.__realize)
         del widget.__realize
-        button = widget.get_ancestor(gtk.Button)
+        button = widget.get_ancestor(Gtk.Button)
         if button:
             button.connect('button-press-event', self.button_press_event)
             button.connect('popup-menu', self.popup_menu)
@@ -697,6 +701,8 @@ class RCMHintedTreeView(HintedTreeView, RCMTreeView):
     """A TreeView that has hints and a context menu."""
     pass
 
+# FIXME: GIPORT .. port to cairo
+MultiDragTreeView = object
 class AllTreeView(HintedTreeView, RCMTreeView, MultiDragTreeView):
     """A TreeView that has hints, a context menu, and multi-selection
     dragging support."""

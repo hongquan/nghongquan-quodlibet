@@ -9,10 +9,7 @@
 #    published by the Free Software Foundation.
 #
 
-import gtk
-import gobject
-import pango
-import gst
+from gi.repository import Gtk, GLib, Pango, Gst
 
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
 
@@ -22,49 +19,49 @@ class ReplayGain(SongsMenuPlugin):
     PLUGIN_ID = 'ReplayGain'
     PLUGIN_NAME = 'Replay Gain'
     PLUGIN_DESC = _('Analyzes ReplayGain with gstreamer, grouped by album')
-    PLUGIN_ICON = gtk.STOCK_MEDIA_PLAY
+    PLUGIN_ICON = Gtk.STOCK_MEDIA_PLAY
     PLUGIN_VERSION = "2.3"
 
     def plugin_albums(self, albums):
-        win = gtk.Dialog(title='ReplayGain', parent=self.plugin_window,
-                buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-                    gtk.STOCK_SAVE, gtk.RESPONSE_OK))
+        win = Gtk.Dialog(title='ReplayGain', parent=self.plugin_window,
+                buttons=(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                    Gtk.STOCK_SAVE, Gtk.ResponseType.OK))
         win.set_default_size(500, 350)
         win.set_border_width(6)
-        swin = gtk.ScrolledWindow()
-        win.vbox.pack_start(swin)
-        swin.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-        swin.set_shadow_type(gtk.SHADOW_IN)
+        swin = Gtk.ScrolledWindow()
+        win.vbox.pack_start(swin, True, True, 0)
+        swin.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        swin.set_shadow_type(Gtk.ShadowType.IN)
         from quodlibet.qltk.views import HintedTreeView
-        model = gtk.TreeStore(object, str, int, str, str)
+        model = Gtk.TreeStore(object, str, int, str, str)
         view = HintedTreeView(model)
         swin.add(view)
-        err_lbl = gtk.Label("%s\n%s" % (
+        err_lbl = Gtk.Label(label="%s\n%s" % (
                 _("One or more songs could not be analyzed.)"),
                 _("Data for these songs will not be written.")))
         err_lbl.set_child_visible(False)
-        win.vbox.pack_start(err_lbl, expand=False)
+        win.vbox.pack_start(err_lbl, False, True, 0)
 
         # Create a view of title/progress/gain/peak for each track + album
-        col = gtk.TreeViewColumn('Track',
-            gobject.new(gtk.CellRendererText, ellipsize=pango.ELLIPSIZE_END),
+        col = Gtk.TreeViewColumn('Track',
+            Gtk.CellRendererText(ellipsize=Pango.EllipsizeMode.END),
             text=1)
-        col.set_sizing(gtk.TREE_VIEW_COLUMN_AUTOSIZE)
+        col.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE)
         col.set_expand(True)
         col.set_fixed_width(120)
         view.append_column(col)
 
-        col = gtk.TreeViewColumn(_('Progress'),
-                gtk.CellRendererProgress(), value=2)
-        col.set_sizing(gtk.TREE_VIEW_COLUMN_AUTOSIZE)
+        col = Gtk.TreeViewColumn(_('Progress'),
+                Gtk.CellRendererProgress(), value=2)
+        col.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE)
         view.append_column(col)
 
-        col = gtk.TreeViewColumn(_('Gain'), gtk.CellRendererText(), text=3)
-        col.set_sizing(gtk.TREE_VIEW_COLUMN_AUTOSIZE)
+        col = Gtk.TreeViewColumn(_('Gain'), Gtk.CellRendererText(), text=3)
+        col.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE)
         view.append_column(col)
 
-        col = gtk.TreeViewColumn(_('Peak'), gtk.CellRendererText(), text=4)
-        col.set_sizing(gtk.TREE_VIEW_COLUMN_AUTOSIZE)
+        col = Gtk.TreeViewColumn(_('Peak'), Gtk.CellRendererText(), text=4)
+        col.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE)
         view.append_column(col)
 
         for album in albums:
@@ -94,7 +91,7 @@ class Analysis(object):
         # bookkeeping
         self.win = win
         self.win.connect('response', self.response)
-        gobject.timeout_add(450, self.progress)
+        GLib.timeout_add(450, self.progress)
         self.set_finished(False)
         self.view = view
         self.model = model
@@ -104,30 +101,30 @@ class Analysis(object):
 
         # gst pipeline for replay gain analysis:
         # filesrc!decodebin!audioconvert!audioresample!rganalysis!fakesink
-        self.pipe = gst.Pipeline("pipe")
-        self.filesrc = gst.element_factory_make("filesrc", "source")
+        self.pipe = Gst.Pipeline()
+        self.filesrc = Gst.ElementFactory.make("filesrc", "source")
         self.pipe.add(self.filesrc)
 
-        self.decode = gst.element_factory_make("decodebin", "decode")
-        self.decode.connect("new-decoded-pad", self.new_decoded_pad)
-        self.decode.connect("removed-decoded-pad", self.removed_decoded_pad)
+        self.decode = Gst.ElementFactory.make("decodebin", "decode")
+        self.decode.connect("pad-added", self.new_decoded_pad)
+        self.decode.connect("pad-removed", self.removed_decoded_pad)
         self.pipe.add(self.decode)
         self.filesrc.link(self.decode)
 
-        self.convert = gst.element_factory_make("audioconvert", "convert")
+        self.convert = Gst.ElementFactory.make("audioconvert", "convert")
         self.pipe.add(self.convert)
 
-        self.resample = gst.element_factory_make("audioresample", "resample")
+        self.resample = Gst.ElementFactory.make("audioresample", "resample")
         self.pipe.add(self.resample)
         self.convert.link(self.resample)
 
-        self.analysis = gst.element_factory_make("rganalysis", "analysis")
+        self.analysis = Gst.ElementFactory.make("rganalysis", "analysis")
         self.nalbum = self.model.iter_n_children(self.album)
         self.analysis.set_property("num-tracks", self.nalbum)
         self.pipe.add(self.analysis)
         self.resample.link(self.analysis)
 
-        self.sink = gst.element_factory_make("fakesink", "sink")
+        self.sink = Gst.ElementFactory.make("fakesink", "sink")
         self.pipe.add(self.sink)
         self.analysis.link(self.sink)
 
@@ -135,30 +132,46 @@ class Analysis(object):
         bus.add_signal_watch()
         bus.connect("message", self.bus_message)
 
-    def new_decoded_pad(self, dbin, pad, islast):
-        pad.link(self.convert.get_pad("sink"))
+    def new_decoded_pad(self, dbin, pad):
+        pad.link(self.convert.get_static_pad("sink"))
 
     def removed_decoded_pad(self, dbin, pad):
-        pad.unlink(self.convert.get_pad("sink"))
+        pad.unlink(self.convert.get_static_pad("sink"))
 
     def bus_message(self, bus, message):
-        if message.type == gst.MESSAGE_TAG:
-            if message.src == self.analysis:
-                tags = message.parse_tag()
-                track = self.model[self.song]
-                album = self.model[self.album]
-                try:
-                    track[3] = '%.2f dB' % tags[gst.TAG_TRACK_GAIN]
-                    track[4] = '%.4f' % tags[gst.TAG_TRACK_PEAK]
-                except KeyError: pass
-                try:
-                    if album[3] != self.error_str:
-                        album[3] = '%.2f dB' % tags[gst.TAG_ALBUM_GAIN]
-                        album[4] = '%.4f' % tags[gst.TAG_ALBUM_PEAK]
-                except KeyError: pass
-        elif message.type == gst.MESSAGE_EOS:
+        if message.type == Gst.MessageType.TAG:
+            # the sink is always the source of the tag messages.
+            # according to __tim, we should always get the rganalysis
+            # tags last so we replace the old tags found by decodebin
+
+            track = self.model[self.song]
+            album = self.model[self.album]
+
+            tags = message.parse_tag()
+            ok, value = tags.get_double(Gst.TAG_TRACK_GAIN)
+            if ok:
+                track[3] = '%.2f dB' % value
+
+            ok, value = tags.get_double(Gst.TAG_TRACK_PEAK)
+            if ok:
+                track[4] = '%.4f' % value
+
+            # FIXME: GIPORT
+            return
+
+            if album[3] == self.error_str:
+                return
+
+            ok, value = tags.get_double(Gst.TAG_ALBUM_GAIN)
+            if ok:
+                album[3] = '%.2f dB' % value
+
+            ok, value = tags.get_double(Gst.TAG_ALBUM_PEAK)
+            if ok:
+                album[4] = '%.4f' % value
+        elif message.type == Gst.MessageType.EOS:
             self.next_song()
-        elif message.type == gst.MESSAGE_ERROR:
+        elif message.type == Gst.MessageType.ERROR:
             err_lbl = self.win.vbox.get_children()[1]
             err_lbl.set_child_visible(True)
             err_lbl.show()
@@ -179,8 +192,9 @@ class Analysis(object):
             self.song = self.model.iter_next(self.song)
             self.nsong += 1
             # preserve rganalysis state across files
-            self.analysis.set_locked_state(True)
-            self.pipe.set_state(gst.STATE_NULL)
+            # FIXME: GIPORT
+            #self.analysis.set_locked_state(True)
+            self.pipe.set_state(Gst.State.NULL)
 
         if self.current:
             # make sure progress hits full
@@ -188,7 +202,7 @@ class Analysis(object):
             self.model[self.album][2] = int(100 * self.nsong / self.nalbum)
 
         if self.song is None:
-            self.pipe.set_state(gst.STATE_NULL)
+            self.pipe.set_state(Gst.State.NULL)
             self.view.collapse_row(self.model.get_path(self.album))
             self.album = self.model.iter_next(self.album)
             if self.album is None:
@@ -201,7 +215,7 @@ class Analysis(object):
             self.view.scroll_to_cell(self.model.get_path(self.song))
             self.current = self.model[self.song]
             self.filesrc.set_property("location", self.current[0]['~filename'])
-            self.pipe.set_state(gst.STATE_PLAYING)
+            self.pipe.set_state(Gst.State.PLAYING)
             self.analysis.set_locked_state(False)
 
     def progress(self):
@@ -209,12 +223,9 @@ class Analysis(object):
         if not song:
             return False
 
-        try:
-            p = self.pipe.query_position(gst.FORMAT_TIME)[0]
-        except gst.QueryError:
-            pass
-        else:
-            p //= gst.MSECOND * 10
+        ok, p = self.pipe.query_position(Gst.Format.TIME)
+        if ok:
+            p //= Gst.MSECOND * 10
             self.current[2] = sp = \
                 int(p / (song.get("~#length", 0) or 2 * p or 1))
             ap = int((sp + 100 * self.nsong) / self.nalbum)
@@ -237,11 +248,11 @@ class Analysis(object):
 
     def response(self, win, response):
         # kill the pipeline in case this is a cancel
-        self.pipe.set_state(gst.STATE_NULL)
+        self.pipe.set_state(Gst.State.NULL)
         self.set_finished(True)
 
         # save only if response says to
-        if response != gtk.RESPONSE_OK:
+        if response != Gtk.ResponseType.OK:
             win.destroy()
             return
 
@@ -277,14 +288,7 @@ class Analysis(object):
 
         win.destroy()
 
-if gst.registry_get_default() is gst:
-    import sys
-    del sys.modules['gst']
-    import pygst
-    pygst.require('0.10')
-    import gst
-
-if not gst.registry_get_default().find_plugin("replaygain"):
+if not Gst.Registry.get().find_plugin("replaygain"):
     __all__ = []
     del ReplayGain
-    raise gst.PluginNotFoundError("replaygain")
+    raise ImportError("GStreamer replaygain plugin not found")

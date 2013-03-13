@@ -11,9 +11,7 @@ import sys
 import threading
 import time
 
-import gobject
-import gtk
-import pango
+from gi.repository import Gtk, GLib, Pango, Gdk
 
 from quodlibet import config
 from quodlibet import const
@@ -53,6 +51,7 @@ class Feed(list):
     def get_age(self):
         return time.time() - self.__lastgot
 
+    @staticmethod
     def __fill_af(feed, af):
         try:
             af["title"] = feed.title or _("Unknown")
@@ -127,7 +126,6 @@ class Feed(list):
             for value in values:
                 if value and value not in af.list("genre"):
                     af.add("genre", value)
-    __fill_af = staticmethod(__fill_af)
 
     def parse(self):
         try:
@@ -202,7 +200,7 @@ class AddFeedDialog(GetStringDialog):
         super(AddFeedDialog, self).__init__(
             qltk.get_top_parent(parent), _("New Feed"),
             _("Enter the location of an audio feed:"),
-            okbutton=gtk.STOCK_ADD)
+            okbutton=Gtk.STOCK_ADD)
 
     def run(self):
         uri = super(AddFeedDialog, self).run()
@@ -212,10 +210,10 @@ class AddFeedDialog(GetStringDialog):
             return None
 
 
-class AudioFeeds(Browser, gtk.VBox):
+class AudioFeeds(Browser, Gtk.VBox):
     __gsignals__ = Browser.__gsignals__
 
-    __feeds = gtk.ListStore(object)  # unread
+    __feeds = Gtk.ListStore(object)  # unread
 
     headers = ("title artist performer ~people album date website language "
                "copyright organization license contact").split()
@@ -227,29 +225,30 @@ class AudioFeeds(Browser, gtk.VBox):
 
     __last_folder = const.HOME
 
-    def cell_data(col, render, model, iter):
+    @staticmethod
+    def cell_data(col, render, model, iter, data):
         if model[iter][0].changed:
             render.markup = "<b>%s</b>" % util.escape(model[iter][0].name)
         else:
             render.markup = util.escape(model[iter][0].name)
         render.set_property('markup', render.markup)
-    cell_data = staticmethod(cell_data)
 
+    @classmethod
     def changed(klass, feeds):
         for row in klass.__feeds:
             if row[0] in feeds:
                 row[0].changed = True
                 row[0] = row[0]
         AudioFeeds.write()
-    changed = classmethod(changed)
 
+    @classmethod
     def write(klass):
         feeds = [row[0] for row in klass.__feeds]
         f = file(FEEDS, "wb")
         pickle.dump(feeds, f, pickle.HIGHEST_PROTOCOL)
         f.close()
-    write = classmethod(write)
 
+    @classmethod
     def init(klass, library):
         try:
             feeds = pickle.load(file(FEEDS, "rb"))
@@ -258,15 +257,15 @@ class AudioFeeds(Browser, gtk.VBox):
         else:
             for feed in feeds:
                 klass.__feeds.append(row=[feed])
-        gobject.idle_add(klass.__do_check)
-    init = classmethod(init)
+        GLib.idle_add(klass.__do_check)
 
+    @classmethod
     def __do_check(klass):
         thread = threading.Thread(target=klass.__check, args=())
         thread.setDaemon(True)
         thread.start()
-    __do_check = classmethod(__do_check)
 
+    @classmethod
     def __check(klass):
         for row in klass.__feeds:
             feed = row[0]
@@ -276,20 +275,19 @@ class AudioFeeds(Browser, gtk.VBox):
                 feed.changed = True
                 row[0] = feed
         klass.write()
-        gobject.timeout_add(60 * 60 * 1000, klass.__do_check)
-    __check = classmethod(__check)
+        GLib.timeout_add(60 * 60 * 1000, klass.__do_check)
 
     def Menu(self, songs, songlist, library):
         menu = SongsMenu(
             library, songs, accels=songlist.accelerators, parent=self)
         if len(songs) == 1:
-            item = qltk.MenuItem(_("_Download..."), gtk.STOCK_CONNECT)
+            item = qltk.MenuItem(_("_Download..."), Gtk.STOCK_CONNECT)
             item.connect('activate', self.__download, songs[0]("~uri"))
             item.set_sensitive(not songs[0].is_file)
         else:
             songs = filter(lambda s: not s.is_file, songs)
             uris = [song("~uri") for song in songs]
-            item = qltk.MenuItem(_("_Download..."), gtk.STOCK_CONNECT)
+            item = qltk.MenuItem(_("_Download..."), Gtk.STOCK_CONNECT)
             item.connect('activate', self.__download_many, uris)
             item.set_sensitive(bool(songs))
         menu.preseparate()
@@ -297,14 +295,14 @@ class AudioFeeds(Browser, gtk.VBox):
         return menu
 
     def __download_many(self, activator, sources):
-        chooser = gtk.FileChooserDialog(
+        chooser = Gtk.FileChooserDialog(
             title=_("Download Files"), parent=qltk.get_top_parent(self),
-            action=gtk.FILE_CHOOSER_ACTION_CREATE_FOLDER,
-            buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-                     gtk.STOCK_SAVE, gtk.RESPONSE_OK))
+            action=Gtk.FileChooserAction.CREATE_FOLDER,
+            buttons=(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                     Gtk.STOCK_SAVE, Gtk.ResponseType.OK))
         chooser.set_current_folder(self.__last_folder)
         resp = chooser.run()
-        if resp == gtk.RESPONSE_OK:
+        if resp == Gtk.ResponseType.OK:
             target = chooser.get_filename()
             if target:
                 type(self).__last_folder = os.path.dirname(target)
@@ -318,17 +316,17 @@ class AudioFeeds(Browser, gtk.VBox):
         chooser.destroy()
 
     def __download(self, activator, source):
-        chooser = gtk.FileChooserDialog(
+        chooser = Gtk.FileChooserDialog(
             title=_("Download File"), parent=qltk.get_top_parent(self),
-            action=gtk.FILE_CHOOSER_ACTION_SAVE,
-            buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-                     gtk.STOCK_SAVE, gtk.RESPONSE_OK))
+            action=Gtk.FileChooserAction.SAVE,
+            buttons=(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                     Gtk.STOCK_SAVE, Gtk.ResponseType.OK))
         chooser.set_current_folder(self.__last_folder)
         name = os.path.basename(source)
         if name:
             chooser.set_current_name(name)
         resp = chooser.run()
-        if resp == gtk.RESPONSE_OK:
+        if resp == Gtk.ResponseType.OK:
             target = chooser.get_filename()
             if target:
                 type(self).__last_folder = os.path.dirname(target)
@@ -339,35 +337,37 @@ class AudioFeeds(Browser, gtk.VBox):
         super(AudioFeeds, self).__init__(spacing=6)
 
         self.__view = view = AllTreeView()
-        self.__render = render = gtk.CellRendererText()
-        render.set_property('ellipsize', pango.ELLIPSIZE_END)
-        col = gtk.TreeViewColumn("Audio Feeds", render)
+        self.__render = render = Gtk.CellRendererText()
+        render.set_property('ellipsize', Pango.EllipsizeMode.END)
+        col = Gtk.TreeViewColumn("Audio Feeds", render)
         col.set_cell_data_func(render, AudioFeeds.cell_data)
         view.append_column(col)
         view.set_model(self.__feeds)
         view.set_rules_hint(True)
         view.set_headers_visible(False)
         swin = ScrolledWindow()
-        swin.set_shadow_type(gtk.SHADOW_IN)
-        swin.set_policy(gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
+        swin.set_shadow_type(Gtk.ShadowType.IN)
+        swin.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         swin.add(view)
-        self.pack_start(swin)
+        self.pack_start(swin, True, True, 0)
 
-        new = gtk.Button(stock=gtk.STOCK_NEW)
+        new = Gtk.Button(stock=Gtk.STOCK_NEW)
         new.connect('clicked', self.__new_feed)
         view.get_selection().connect('changed', self.__changed)
-        view.get_selection().set_mode(gtk.SELECTION_MULTIPLE)
+        view.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
         view.connect('popup-menu', self.__popup_menu)
 
         targets = [("text/uri-list", 0, 1), ("text/x-moz-url", 0, 2)]
-        view.drag_dest_set(gtk.DEST_DEFAULT_ALL, targets, gtk.gdk.ACTION_COPY)
+        targets = [Gtk.TargetEntry.new(*t) for t in targets]
+
+        view.drag_dest_set(Gtk.DestDefaults.ALL, targets, Gdk.DragAction.COPY)
         view.connect('drag-data-received', self.__drag_data_received)
         view.connect('drag-motion', self.__drag_motion)
         view.connect('drag-leave', self.__drag_leave)
 
         self.connect_object('destroy', self.__save, view)
 
-        self.pack_start(Alignment(new, left=3, bottom=3), expand=False)
+        self.pack_start(Alignment(new, left=3, bottom=3), False, True, 0)
         self.show_all()
 
     def __drag_motion(self, view, ctx, x, y, time):
@@ -382,7 +382,9 @@ class AudioFeeds(Browser, gtk.VBox):
     def __drag_data_received(self, view, ctx, x, y, sel, tid, etime):
         view.emit_stop_by_name('drag-data-received')
         targets = [("text/uri-list", 0, 1), ("text/x-moz-url", 0, 2)]
-        view.drag_dest_set(gtk.DEST_DEFAULT_ALL, targets, gtk.gdk.ACTION_COPY)
+        targets = [Gtk.TargetEntry.new(*t) for t in targets]
+
+        view.drag_dest_set(Gtk.DestDefaults.ALL, targets, Gdk.DragAction.COPY)
         if tid == 1:
             uri = sel.get_uris()[0]
         elif tid == 2:
@@ -405,11 +407,11 @@ class AudioFeeds(Browser, gtk.VBox):
                   "or the location may not be an audio feed.") %
                 util.escape(feed.uri)).run()
 
-    def __menu(self, view):
+    def __popup_menu(self, view):
         model, paths = view.get_selection().get_selected_rows()
-        menu = gtk.Menu()
-        refresh = gtk.ImageMenuItem(gtk.STOCK_REFRESH)
-        delete = gtk.ImageMenuItem(gtk.STOCK_DELETE)
+        menu = Gtk.Menu()
+        refresh = Gtk.ImageMenuItem(Gtk.STOCK_REFRESH, use_stock=True)
+        delete = Gtk.ImageMenuItem(Gtk.STOCK_DELETE, use_stock=True)
 
         refresh.connect_object(
             'activate', self.__refresh, [model[p][0] for p in paths])
@@ -420,14 +422,11 @@ class AudioFeeds(Browser, gtk.VBox):
         menu.append(delete)
         menu.show_all()
         menu.connect('selection-done', lambda m: m.destroy())
-        return menu
+
+        return view.popup_menu(menu, 0, Gtk.get_current_event_time())
 
     def __save(self, view):
         AudioFeeds.write()
-
-    def __popup_menu(self, view):
-        return view.popup_menu(self.__menu(view), 0,
-                               gtk.get_current_event_time())
 
     def __refresh(self, feeds):
         changed = filter(Feed.parse, feeds)

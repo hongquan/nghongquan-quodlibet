@@ -15,6 +15,7 @@ from quodlibet import util
 
 from quodlibet.qltk.views import RCMHintedTreeView
 
+
 def MenuItems(marks, player, seekable):
     sizes = gtk.SizeGroup(gtk.SIZE_GROUP_HORIZONTAL)
     items = []
@@ -26,17 +27,20 @@ def MenuItems(marks, player, seekable):
         i.connect_object('activate', player.seek, time * 1000)
         i.set_sensitive(time >= 0 and seekable)
         i.add(gtk.HBox(spacing=12))
-        if time < 0: l = gtk.Label(_("N/A"))
-        else: l = gtk.Label(util.format_time(time))
+        if time < 0:
+            l = gtk.Label(_("N/A"))
+        else:
+            l = gtk.Label(util.format_time(time))
         l.set_alignment(0.0, 0.5)
         sizes.add_widget(l)
-        i.child.pack_start(l, expand=False)
+        i.get_child().pack_start(l, expand=False)
         m = gtk.Label(mark)
         m.set_alignment(0.0, 0.5)
-        i.child.pack_start(m)
+        i.get_child().pack_start(m)
         i.show_all()
         items.append(i)
     return items
+
 
 class EditBookmarksPane(gtk.VBox):
     def __init__(self, library, song, close=False):
@@ -60,21 +64,24 @@ class EditBookmarksPane(gtk.VBox):
         sw.add(RCMHintedTreeView(model))
 
         render = gtk.CellRendererText()
+
         def cdf(column, cell, model, iter):
-            if model[iter][0] < 0: cell.set_property('text', _("N/A"))
-            else: cell.set_property('text', util.format_time(model[iter][0]))
+            if model[iter][0] < 0:
+                cell.set_property('text', _("N/A"))
+            else:
+                cell.set_property('text', util.format_time(model[iter][0]))
         render.set_property('editable', True)
         render.connect('edited', self.__edit_time, model)
         col = gtk.TreeViewColumn(_("Time"), render)
         col.set_cell_data_func(render, cdf)
-        sw.child.append_column(col)
+        sw.get_child().append_column(col)
 
         render = gtk.CellRendererText()
         render.set_property('ellipsize', pango.ELLIPSIZE_END)
         col = gtk.TreeViewColumn(_("Bookmark Name"), render, text=1)
         render.set_property('editable', True)
         render.connect('edited', self.__edit_name, model)
-        sw.child.append_column(col)
+        sw.get_child().append_column(col)
         self.pack_start(sw)
         self.accels = gtk.AccelGroup()
 
@@ -85,7 +92,8 @@ class EditBookmarksPane(gtk.VBox):
         if close:
             self.close = gtk.Button(stock=gtk.STOCK_CLOSE)
             hbox.pack_start(self.close)
-        else: hbox.set_layout(gtk.BUTTONBOX_END)
+        else:
+            hbox.set_layout(gtk.BUTTONBOX_END)
         self.pack_start(hbox, expand=False)
 
         add.connect_object('clicked', self.__add, model, time, name)
@@ -93,7 +101,7 @@ class EditBookmarksPane(gtk.VBox):
         model.set_sort_column_id(0, gtk.SORT_ASCENDING)
         model.connect('row-changed', self.__set_bookmarks, library, song)
 
-        selection = sw.child.get_selection()
+        selection = sw.get_child().get_selection()
         selection.set_mode(gtk.SELECTION_MULTIPLE)
         selection.connect('changed', self.__check_selection, remove)
         remove.connect('clicked', self.__remove, selection, library, song)
@@ -114,8 +122,9 @@ class EditBookmarksPane(gtk.VBox):
             'activate', self.accels, keyval, mod, gtk.ACCEL_VISIBLE)
         menu.append(remove)
         menu.show_all()
-        sw.child.connect('popup-menu', self.__popup, menu)
-        sw.child.connect('key-press-event', self.__view_key_press, remove)
+        sw.get_child().connect('popup-menu', self.__popup, menu)
+        sw.get_child().connect('key-press-event',
+                                self.__view_key_press, remove)
         self.connect_object('destroy', gtk.Menu.destroy, menu)
 
         self.__fill(model, song)
@@ -128,22 +137,32 @@ class EditBookmarksPane(gtk.VBox):
         return view.popup_menu(menu, 0, gtk.get_current_event_time())
 
     def __edit_name(self, render, path, new, model):
-        if new: model[path][1] = new
+        if new:
+            model[path][1] = new
 
     def __edit_time(self, render, path, new, model):
-        try: time = util.parse_time(new, None)
-        except: pass
-        else: model[path][0] = time
+        try:
+            time = util.parse_time(new, None)
+        except:
+            pass
+        else:
+            model[path][0] = time
 
     def __check_entry(self, add, time, name):
-        try: util.parse_time(time.get_text(), None)
-        except: add.set_sensitive(False)
-        else: add.set_sensitive(bool(name.get_text()))
+        try:
+            util.parse_time(time.get_text(), None)
+        except:
+            add.set_sensitive(False)
+        else:
+            add.set_sensitive(bool(name.get_text()))
 
     def __add(self, model, time, name):
-        try: time = util.parse_time(time.get_text(), None)
-        except: pass
-        else: model.append([time, name.get_text()])
+        try:
+            time = util.parse_time(time.get_text(), None)
+        except:
+            pass
+        else:
+            model.append([time, name.get_text()])
 
     def __check_selection(self, selection, remove):
         remove.set_sensitive(bool(selection.get_selected_rows()[1]))
@@ -155,8 +174,10 @@ class EditBookmarksPane(gtk.VBox):
             self.__set_bookmarks(model, None, None, library, song)
 
     def __set_bookmarks(self, model, a, b, library, song):
-        try: song.bookmarks = [(r[0], r[1].decode('utf-8')) for r in model]
-        except (AttributeError, ValueError): pass
+        try:
+            song.bookmarks = [(r[0], r[1].decode('utf-8')) for r in model]
+        except (AttributeError, ValueError):
+            pass
         else:
             if library is not None:
                 library.changed([song])
@@ -165,6 +186,7 @@ class EditBookmarksPane(gtk.VBox):
         model.clear()
         for time, mark in song.bookmarks:
             model.append([time, mark])
+
 
 class EditBookmarks(qltk.Window):
     def __init__(self, parent, library, player):
@@ -180,14 +202,15 @@ class EditBookmarks(qltk.Window):
         self.connect_object('destroy', library.disconnect, s)
 
         position = player.get_position() // 1000
-        self.child.time.set_text(util.format_time(position))
-        self.child.markname.grab_focus()
+        self.get_child().time.set_text(util.format_time(position))
+        self.get_child().markname.grab_focus()
 
-        self.child.close.connect_object('clicked', qltk.Window.destroy, self)
+        self.get_child().close.connect_object('clicked',
+                                              qltk.Window.destroy, self)
 
         self.show_all()
 
     def __check_lock(self, library, songs, song, model):
         if song in songs:
-            for c in self.child.get_children()[:-1]:
+            for c in self.get_child().get_children()[:-1]:
                 c.set_sensitive(False)

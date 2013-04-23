@@ -14,6 +14,7 @@ from quodlibet import qltk
 from quodlibet.qltk.views import RCMHintedTreeView
 from quodlibet.qltk import entry
 
+
 class _KeyValueEditor(qltk.Window):
     """Base class for key-value edit widgets"""
 
@@ -53,7 +54,7 @@ class _KeyValueEditor(qltk.Window):
         add.set_sensitive(False)
         t.attach(add, 2, 3, 1, 2, xoptions=gtk.FILL)
 
-        self.child.pack_start(t, expand=False)
+        self.get_child().pack_start(t, expand=False)
 
         # Set up the model for this widget
         self.model = gtk.ListStore(str, str)
@@ -73,7 +74,7 @@ class _KeyValueEditor(qltk.Window):
         sw.set_shadow_type(gtk.SHADOW_IN)
         sw.set_policy(gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
         sw.add(view)
-        self.child.pack_start(sw)
+        self.get_child().pack_start(sw)
 
         menu = gtk.Menu()
         remove = gtk.ImageMenuItem(gtk.STOCK_REMOVE)
@@ -89,7 +90,7 @@ class _KeyValueEditor(qltk.Window):
         bbox.pack_start(rem_b)
         close = gtk.Button(stock=gtk.STOCK_CLOSE)
         bbox.pack_start(close)
-        self.child.pack_start(bbox, expand=False)
+        self.get_child().pack_start(bbox, expand=False)
 
         selection = view.get_selection()
         name.connect_object('activate', gtk.Entry.grab_focus, self.value)
@@ -135,7 +136,8 @@ class _KeyValueEditor(qltk.Window):
         cell.set_property('text', '%s\n\t%s' % (name, content))
 
     def __changed(self, entry, buttons):
-        for b in buttons: b.set_sensitive(bool(entry.get_text()))
+        for b in buttons:
+            b.set_sensitive(bool(entry.get_text()))
 
     def __add(self, selection, name, value, model):
         value = value.get_text()
@@ -152,7 +154,7 @@ class CBESEditor(_KeyValueEditor):
         super(CBESEditor, self).__init__(title, validator)
         self.set_transient_for(qltk.get_top_parent(cbes))
         self.connect_object('destroy', self.__finish, cbes)
-        self.value.set_text(cbes.child.get_text())
+        self.value.set_text(cbes.get_child().get_text())
 
     def fill_values(self):
         for row in self.cbes.get_model():
@@ -188,8 +190,8 @@ class StandaloneEditor(_KeyValueEditor):
         if os.path.exists(filename):
             fileobj = file(filename, "rU")
             lines = list(fileobj.readlines())
-            for i in range(len(lines) / 2 ):
-                ret.append( (lines[i*2+1].strip(), lines[i*2].strip()) )
+            for i in range(len(lines) / 2):
+                ret.append((lines[i * 2 + 1].strip(), lines[i * 2].strip()))
         return ret
 
     def __init__(self, filename, title, initial=None, validator=None):
@@ -209,8 +211,8 @@ class StandaloneEditor(_KeyValueEditor):
                     row=[lines.pop(1).strip(), lines.pop(0).strip()])
         if not len(self.model) and self.initial:
             #print_d("None found - using defaults.", context=self)
-            for (k,v) in self.initial:
-                self.model.append(row=[v.strip(), k.strip()] )
+            for (k, v) in self.initial:
+                self.model.append(row=[v.strip(), k.strip()])
 
     def write(self, create=True):
         """Save to a filename. If create is True, any needed parent
@@ -230,6 +232,7 @@ class StandaloneEditor(_KeyValueEditor):
 
 ICONS = {gtk.STOCK_EDIT: CBESEditor}
 
+
 class ComboBoxEntrySave(gtk.ComboBoxEntry):
     """A ComboBoxEntry that remembers the past 'count' strings entered,
     and can save itself to (and load itself from) a filename or file-like."""
@@ -238,13 +241,14 @@ class ComboBoxEntrySave(gtk.ComboBoxEntry):
     __last = ""
 
     def __init__(self, filename=None, initial=[], count=5, id=None,
-        validator=None, title=_("Saved Values"),
-        edit_title=_("Edit saved values...")):
+                 validator=None, title=_("Saved Values"),
+                 edit_title=_("Edit saved values...")):
         self.count = count
         self.filename = filename
         id = filename or id
 
-        try: model = self.__models[id]
+        try:
+            model = self.__models[id]
         except KeyError:
             model = type(self).__models[id] = gtk.ListStore(str, str, str)
 
@@ -264,7 +268,7 @@ class ComboBoxEntrySave(gtk.ComboBoxEntry):
         if not len(model):
             self.__fill(filename, initial, edit_title)
 
-        self.remove(self.child)
+        self.remove(self.get_child())
         self.add(entry.ValidatingEntry(validator))
 
         self.connect_object('destroy', self.set_model, None)
@@ -272,30 +276,32 @@ class ComboBoxEntrySave(gtk.ComboBoxEntry):
             validator, title)
 
     def enable_clear_button(self):
-        self.child.enable_clear_button()
+        self.get_child().enable_clear_button()
 
     def __changed(self, model, validator, title):
         iter = self.get_active_iter()
         if iter:
             if model[iter][2] in ICONS:
-                self.child.set_text(self.__last)
+                self.get_child().set_text(self.__last)
                 Kind = ICONS[model[iter][2]]
                 Kind(self, title, validator)
                 self.set_active(-1)
             else:
                 self.__focus_entry()
-        self.__last = self.child.get_text()
+        self.__last = self.get_child().get_text()
 
     def __focus_entry(self):
-        self.child.grab_focus()
-        self.child.emit('move-cursor', gtk.MOVEMENT_BUFFER_ENDS, 0, False)
+        self.get_child().grab_focus()
+        self.get_child().emit('move-cursor',
+                              gtk.MOVEMENT_BUFFER_ENDS, 0, False)
 
     def __fill(self, filename, initial, edit_title):
         model = self.get_model()
         model.append(row=["", edit_title, gtk.STOCK_EDIT])
         model.append(row=[None, None, None])
 
-        if filename is None: return
+        if filename is None:
+            return
 
         if os.path.exists(filename + ".saved"):
             fileobj = file(filename + ".saved", "rU")
@@ -332,7 +338,8 @@ class ComboBoxEntrySave(gtk.ComboBoxEntry):
     def write(self, filename=None, create=True):
         """Save to a filename. If create is True, any needed parent
         directories will be created."""
-        if filename is None: filename = self.filename
+        if filename is None:
+            filename = self.filename
         try:
             if create:
                 if not os.path.isdir(os.path.dirname(filename)):
@@ -342,14 +349,16 @@ class ComboBoxEntrySave(gtk.ComboBoxEntry):
             memory = file(filename, "w")
             target = saved
             for row in self.get_model():
-                if row[0] is None: target = memory
+                if row[0] is None:
+                    target = memory
                 elif row[2] is None:
                     target.write(row[0] + "\n")
                     if target is saved:
                         target.write(row[1] + "\n")
             saved.close()
             memory.close()
-        except EnvironmentError: pass
+        except EnvironmentError:
+            pass
 
     def __remove_if_present(self, text):
         # Removes an item from the list if it's present in the remembered
@@ -364,12 +373,14 @@ class ComboBoxEntrySave(gtk.ComboBoxEntry):
             elif row[2] is None and row[0] == text:
                 # Found the value, and it's not the magic value -- remove
                 # it if necessary, and return whether or not to continue.
-                if removable: model.remove(row.iter)
+                if removable:
+                    model.remove(row.iter)
                 return not removable
 
     def prepend_text(self, text):
         # If we find the value in the saved values, don't prepend it.
-        if self.__remove_if_present(text): return
+        if self.__remove_if_present(text):
+            return
 
         model = self.get_model()
         for row in model:

@@ -8,32 +8,34 @@
 #                  Nick Boultbee <nick.boultbee@gmail.com>
 # Licensed under GPLv2. See Quod Libet's COPYING for more information.
 
+from httplib import HTTPException
+import cPickle as pickle
+import os
+import threading
+import time
 import urllib
 import urllib2
-import time
-import threading
-import os
-import cPickle as pickle
-from quodlibet.util.dprint import print_d
-from httplib import HTTPException
+
+import gobject
+import gtk
 
 try:
     from hashlib import md5
 except ImportError:
     from md5 import md5
 
-import gobject, gtk
-
 from quodlibet import config, const, app, parse, util, qltk
-from quodlibet.qltk.msg import Message
-from quodlibet.qltk.entry import ValidatingEntry, UndoEntry
 from quodlibet.plugins.events import EventPlugin
-from quodlibet.plugins import PluginConfigMixin,ConfigCheckButton
+from quodlibet.plugins import PluginConfigMixin
+from quodlibet.qltk.entry import ValidatingEntry, UndoEntry
+from quodlibet.qltk.msg import Message
+from quodlibet.util.dprint import print_d
+
 
 SERVICES = {
-            'Last.fm':  'http://post.audioscrobbler.com/',
-            'Libre.fm': 'http://turtle.libre.fm/'
-           }
+    'Last.fm': 'http://post.audioscrobbler.com/',
+    'Libre.fm': 'http://turtle.libre.fm/'
+}
 
 DEFAULT_SERVICE = 'Last.fm'
 DEFAULT_TITLEPAT = '<title><version| (<version>)>'
@@ -45,8 +47,9 @@ def config_get(key, default=''):
     return default."""
     try:
         return (config.get("plugins", "scrobbler_%s" % key) or default)
-    except config.error:
+    except config.Error:
         return default
+
 
 class QLSubmitQueue(PluginConfigMixin):
     """Manages the submit queue for scrobbles. Works independently of the
@@ -88,7 +91,8 @@ class QLSubmitQueue(PluginConfigMixin):
         """Submit a song. If 'timestamp' is 0, the current time will
         be used."""
         formatted = self._format_song(song)
-        if formatted is None: return
+        if formatted is None:
+            return
         if timestamp > 0:
             formatted['i'] = str(timestamp)
         elif timestamp == 0:
@@ -160,7 +164,8 @@ class QLSubmitQueue(PluginConfigMixin):
                               "QLScrobbler up. Until then, songs will not be "
                               "submitted.", gtk.MESSAGE_INFO)
                 self.broken = True
-        elif (self.username, self.password, self.base_url)!=(user, passw, url):
+        elif (self.username, self.password,
+                self.base_url) != (user, passw, url):
             self.username, self.password, self.base_url = (user, passw, url)
             self.broken = False
             self.handshake_sent = False
@@ -200,8 +205,8 @@ class QLSubmitQueue(PluginConfigMixin):
                     self.handshake_sent = True
                 else:
                     self.handshake_event.clear()
-                    self.handshake_delay = min(self.handshake_delay*2, 120)
-                    gobject.timeout_add(self.handshake_delay*60*1000,
+                    self.handshake_delay = min(self.handshake_delay * 2, 120)
+                    gobject.timeout_add(self.handshake_delay * 60 * 1000,
                                         self.handshake_event.set)
                     continue
             self.changed_event.wait()
@@ -327,6 +332,7 @@ class QLSubmitQueue(PluginConfigMixin):
     def quick_dialog(self, msg, dialog_type):
         gobject.idle_add(self.quick_dialog_helper, dialog_type, msg)
 
+
 class QLScrobbler(EventPlugin, PluginConfigMixin):
     PLUGIN_ID = "QLScrobbler"
     PLUGIN_NAME = _("AudioScrobbler Submission")
@@ -434,7 +440,7 @@ class QLScrobbler(EventPlugin, PluginConfigMixin):
         def combo_changed(widget, urlent):
             service = widget.get_active_text()
             config.set("plugins", "scrobbler_service", service)
-            urlent.set_sensitive( (service not in SERVICES) )
+            urlent.set_sensitive((service not in SERVICES))
             urlent.set_text(self.config_get_url())
 
         def check_login(*args):
@@ -458,7 +464,7 @@ class QLScrobbler(EventPlugin, PluginConfigMixin):
         for idx, label in enumerate(map(gtk.Label, label_names)):
             label.set_alignment(0.0, 0.5)
             label.set_use_underline(True)
-            table.attach(label, 0, 1, idx, idx+1,
+            table.attach(label, 0, 1, idx, idx + 1,
                          xoptions=gtk.FILL | gtk.SHRINK)
             labels.append(label)
 
@@ -521,7 +527,7 @@ class QLScrobbler(EventPlugin, PluginConfigMixin):
         for idx, label in enumerate(map(gtk.Label, label_names)):
             label.set_alignment(0.0, 0.5)
             label.set_use_underline(True)
-            table.attach(label, 0, 1, idx, idx+1,
+            table.attach(label, 0, 1, idx, idx + 1,
                          xoptions=gtk.FILL | gtk.SHRINK)
             labels.append(label)
 

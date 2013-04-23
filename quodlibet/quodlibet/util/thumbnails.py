@@ -7,17 +7,14 @@
 
 import os
 import tempfile
-
-try:
-  import hashlib as hash
-except ImportError:
-  import md5 as hash
+import hashlib as hash
 
 import gtk
 
 from quodlibet.util import mtime, fsnative, pathname2url
 from quodlibet.util import xdg_get_cache_home, mkdir
 from quodlibet.const import USERDIR
+
 
 def add_border(pixbuf, val, round=False):
     """Add a 1px border to the pixbuf and round of the edges if needed.
@@ -44,20 +41,22 @@ def add_border(pixbuf, val, round=False):
             (0, o, m, l),
             (n, m, e, e),
             (p, l, e, e)
-            )
+        )
 
         overlay = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, True, 8, 1, 1)
         overlay.fill(m)
 
         for y, row in enumerate(mask):
             for x, pix in enumerate(row):
-                for xn, yn in [(x, y), (w+1-x, y), (w+1-x, h+1-y), (x, h+1-y)]:
+                for xn, yn in [(x, y), (w + 1 - x, y), (w + 1 - x, h + 1 - y),
+                               (x, h + 1 - y)]:
                     if pix == l:
                         overlay.composite(newpb, xn, yn, 1, 1, 0, 0, 1, 1,
-                            gtk.gdk.INTERP_NEAREST, 70)
+                                          gtk.gdk.INTERP_NEAREST, 70)
                     elif pix != e:
                         newpb.subpixbuf(xn, yn, 1, 1).fill(pix)
     return newpb
+
 
 def calc_scale_size(boundary, size, scale_up=True):
     """Returns the biggest possible size to fit into the boundary,
@@ -81,6 +80,7 @@ def calc_scale_size(boundary, size, scale_up=True):
 
     return scale_w, scale_h
 
+
 def scale(pixbuf, boundary, scale_up=True, force_copy=False):
     """Scale a pixbuf so it fits into the boundary.
     (preserves image aspect ratio)"""
@@ -96,6 +96,7 @@ def scale(pixbuf, boundary, scale_up=True, force_copy=False):
 
     return pixbuf.scale_simple(scale_w, scale_h, gtk.gdk.INTERP_BILINEAR)
 
+
 def get_thumbnail_folder():
     """Returns a path to an existing folder"""
 
@@ -110,6 +111,7 @@ def get_thumbnail_folder():
     mkdir(thumb_folder, 0700)
     return thumb_folder
 
+
 def get_thumbnail(path, boundary):
     """Get a thumbnail of an image. Will create/use a thumbnail in
     the user's thumbnail directory if possible. Follows the
@@ -121,7 +123,7 @@ def get_thumbnail(path, boundary):
     # embedded thumbnails come from /tmp/
     # and too big thumbnails make no sense
     if path.startswith(tempfile.gettempdir()) or \
-        width > 256 or height > 256 or mtime(path) == 0:
+            width > 256 or height > 256 or mtime(path) == 0:
         return gtk.gdk.pixbuf_new_from_file_at_size(path, width, height)
 
     if width <= 128 and height <= 128:
@@ -165,7 +167,7 @@ def get_thumbnail(path, boundary):
             "tEXt::Thumb::Size": str(os.path.getsize(fsnative(path))),
             "tEXt::Thumb::Mimetype": mime,
             "tEXt::Software": "QuodLibet"
-            }
+        }
 
         pb = scale(pb, (thumb_size, thumb_size))
         pb.save(thumb_path, "png", options)

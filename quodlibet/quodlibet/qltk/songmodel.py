@@ -5,7 +5,6 @@
 # published by the Free Software Foundation
 
 import gtk
-import gobject
 
 from quodlibet.qltk.playorder import ORDERS
 
@@ -20,12 +19,15 @@ class PlaylistMux(object):
     def __check_q(self, player, song):
         if song is not None:
             iter = self.q.find(song)
-            if iter: self.q.remove(iter)
+            if iter:
+                self.q.remove(iter)
             self.q.reset()
 
     def get_current(self):
-        if self.q.current is not None: return self.q.current
-        else: return self.pl.current
+        if self.q.current is not None:
+            return self.q.current
+        else:
+            return self.pl.current
 
     current = property(get_current)
 
@@ -58,10 +60,8 @@ class PlaylistMux(object):
         return self.pl.go_to(song, explicit)
 
     def reset(self):
-        self.pl.reset()
         self.q.go_to(None)
-        if not self.pl.is_empty():
-            self.next()
+        self.pl.reset()
 
     def enqueue(self, songs):
         for song in songs:
@@ -190,3 +190,5 @@ class PlaylistModel(TrackCurrentModel):
     def reset(self):
         self.go_to(None)
         self.order.reset(self)
+        if not self.is_empty():
+            self.next()

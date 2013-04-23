@@ -7,11 +7,13 @@
 import sys
 import time
 import os
+import re
 
 import quodlibet.const
 import quodlibet.util.logging
 
 from quodlibet.const import ENCODING
+
 
 def _format_print(string, prefix=""):
     """Inserts the given prefix at the beginning of each line"""
@@ -65,52 +67,63 @@ def extract_caller_info():
             return info
 
 
-class COLOR(object):
+class Colorise(object):
     @classmethod
     def __reset(cls, text):
         return text + '\033[0m'
 
     @classmethod
-    def Magenta(cls, text):
+    def magenta(cls, text):
         return cls.__reset('\033[95m' + text)
 
     @classmethod
-    def Blue(cls, text):
+    def blue(cls, text):
         return cls.__reset('\033[94m' + text)
 
     @classmethod
-    def Cyan(cls, text):
+    def cyan(cls, text):
         return cls.__reset('\033[96m' + text)
 
     @classmethod
-    def White(cls, text):
+    def white(cls, text):
         return cls.__reset('\033[97m' + text)
 
     @classmethod
-    def Yellow(cls, text):
+    def yellow(cls, text):
         return cls.__reset('\033[93m' + text)
 
     @classmethod
-    def Green(cls, text):
+    def green(cls, text):
         return cls.__reset('\033[92m' + text)
 
     @classmethod
-    def Red(cls, text):
+    def red(cls, text):
         return cls.__reset('\033[91m' + text)
 
     @classmethod
-    def Black(cls, text):
+    def black(cls, text):
         return cls.__reset('\033[90m' + text)
 
+    @classmethod
+    def bold(cls, text):
+        return cls.__reset('\033[1m' + text)
 
-def _print(string, color=None, frm="utf-8", output=sys.stdout):
+    @classmethod
+    def gray(cls, text):
+        return cls.__reset('\033[2m' + text)
+
+
+def _strip_color(text, reg=re.compile("(\x1b\[\d{1,2}m|\\x1b\[0m)")):
+    return reg.sub("", text)
+
+
+def _print(string, frm="utf-8", output=sys.stdout, strip_color=True):
     if os.name == 'nt':
         return
 
     if output:
-        # only print with colors if the file is a terminal
-        if color is not None and output.isatty():
-            string = color
+        if strip_color and not output.isatty():
+            string = _strip_color(string)
 
         if isinstance(string, unicode):
             string = string.encode(ENCODING, "replace")
@@ -124,7 +137,7 @@ def _print(string, color=None, frm="utf-8", output=sys.stdout):
 
 def print_(string, output=sys.stdout):
     string = _format_print(string)
-    quodlibet.util.logging.log(string)
+    quodlibet.util.logging.log(_strip_color(string))
     _print(string, output=output)
 
 
@@ -146,17 +159,14 @@ def print_d(string, context=""):
     # terminal output. APT uses a similar output format.
     prefix = _("D: ")
 
-    color_string = "%s: %s: %s" % (COLOR.Magenta(timestr),
-                                   COLOR.Blue(context), string)
-    color_string = _format_print(color_string, COLOR.Green(prefix))
+    string = "%s: %s: %s" % (Colorise.magenta(timestr),
+                             Colorise.blue(context), string)
+    string = _format_print(string, Colorise.green(prefix))
 
-    string = "%s: %s: %s" % (timestr, context, string)
-    string = _format_print(string, prefix)
-
-    _print(string, color=color_string, output=output)
+    _print(string, output=output)
 
     # Translators: Name of the debug tab in the Output Log window
-    quodlibet.util.logging.log(string, _("Debug"))
+    quodlibet.util.logging.log(_strip_color(string), _("Debug"))
 
 
 def print_w(string):
@@ -165,13 +175,11 @@ def print_w(string):
     # terminal output. APT uses a similar output format.
     prefix = _("W: ")
 
-    color_string = _format_print(string, COLOR.Red(prefix))
-    string = _format_print(string, prefix)
-
-    _print(string, color_string, output=sys.stderr)
+    string = _format_print(string, Colorise.red(prefix))
+    _print(string, output=sys.stderr)
 
     # Translators: Name of the warnings tab in the Output Log window
-    quodlibet.util.logging.log(string, _("Warnings"))
+    quodlibet.util.logging.log(_strip_color(string), _("Warnings"))
 
 
 def print_e(string, context=None):
@@ -180,10 +188,8 @@ def print_e(string, context=None):
     # terminal output. APT uses a similar output format.
     prefix = _("E: ")
 
-    color_string = _format_print(string, COLOR.Red(prefix))
-    string = _format_print(string, prefix)
-
-    _print(string, color_string, output=sys.stderr)
+    string = _format_print(string, Colorise.red(prefix))
+    _print(string, output=sys.stderr)
 
     # Translators: Name of the warnings tab in the Output Log window
-    quodlibet.util.logging.log(string, _("Errors"))
+    quodlibet.util.logging.log(_strip_color(string), _("Errors"))

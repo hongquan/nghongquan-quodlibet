@@ -7,6 +7,9 @@ import os
 import shutil
 import sys
 
+# disable translations
+os.environ["QUODLIBET_NO_TRANS"] = ""
+
 from distutils.core import setup, Command
 from distutils.dep_util import newer
 from distutils.command.build_scripts import build_scripts as distutils_build_scripts
@@ -16,7 +19,7 @@ from gdist import GDistribution
 from gdist.clean import clean as gdist_clean
 
 PACKAGES = ("browsers devices formats library parse plugins qltk "
-            "util player debug").split()
+            "util player").split()
 
 # TODO: link this better to the app definitions
 MIN_PYTHON_VER = (2,6)
@@ -53,6 +56,7 @@ class test_cmd(Command):
         ("to-run=", None, "list of tests to run (default all)"),
         ("suite=", None, "test suite (folder) to run (default 'tests')"),
         ]
+    use_colors = sys.stderr.isatty() and os.name != "nt"
 
     def initialize_options(self):
         self.to_run = []
@@ -62,11 +66,23 @@ class test_cmd(Command):
         if self.to_run:
             self.to_run = self.to_run.split(",")
 
+    @classmethod
+    def _red(cls, text):
+        from quodlibet.util.dprint import Colorise
+        return Colorise.red(text) if cls.use_colors else text
+
     def run(self):
+        mods = sys.modules.keys()
+        if "gobject" in mods or "gtk" in mods or "glib" in mods:
+            raise SystemExit("E: setup.py shouldn't depend on pygtk")
+
         tests = __import__("tests")
         subdir = (self.suite != "tests" and self.suite) or None
-        if tests.unit(self.to_run, subdir=subdir):
-            raise SystemExit("Test failures are listed above.")
+        failures, errors = tests.unit(self.to_run, subdir=subdir)
+        if failures or errors:
+            raise SystemExit(self._red("%d test failure(s) and "
+                                       "%d test error(s), as detailed above."
+                             % (failures, errors)))
 
 class build_scripts(distutils_build_scripts):
     description = "copy scripts to build directory"
@@ -110,24 +126,43 @@ class coverage_cmd(Command):
             cmd.run()
         tracer.runfunc(run_tests)
         results = tracer.results()
+
         coverage = os.path.join(os.path.dirname(__file__), "coverage")
         results.write_results(show_missing=True, coverdir=coverage)
+
         map(os.unlink, glob.glob(os.path.join(coverage, "[!q]*.cover")))
         try: os.unlink(os.path.join(coverage, "..setup.cover"))
         except OSError: pass
 
-        total_lines = 0
-        bad_lines = 0
+        # compute coverage
+        stats = []
+        cov_files = []
         for filename in glob.glob(os.path.join(coverage, "*.cover")):
+            cov_files.append(filename)
             lines = file(filename, "rU").readlines()
-            total_lines += len(lines)
-            bad_lines += len(
-                [line for line in lines if
-                 (line.startswith(">>>>>>") and
-                  "finally:" not in line and '"""' not in line)])
+            lines = filter(None, map(str.strip, lines))
+            total_lines = len(lines)
+            if not total_lines:
+                continue
+            bad_lines = len([l for l in lines if l.startswith(">>>>>>")])
+            percent = 100.0 * (total_lines - bad_lines) / float(total_lines)
+            stats.append((percent, filename, total_lines, bad_lines))
+        stats.sort(reverse=True)
+        print "#" * 80
+        print "COVERAGE"
+        print "#" * 80
+        total_sum = 0
+        bad_sum = 0
+        for s in stats:
+            p, f, t, b = s
+            total_sum += t
+            bad_sum += b
+            print "%6.2f%% %s" % (p, os.path.basename(f))
+        print "-" * 80
         print "Coverage data written to", coverage, "(%d/%d, %0.2f%%)" % (
-            total_lines - bad_lines, total_lines,
-            100.0 * (total_lines - bad_lines) / float(total_lines))
+            total_sum - bad_sum, total_sum,
+            100.0 * (total_sum - bad_sum) / float(total_sum))
+        print "#" * 80
 
 
 class check(Command):
@@ -257,11 +292,11 @@ if __name__ == "__main__":
         'packages': ["quodlibet"] + map("quodlibet.".__add__, PACKAGES),
         'package_data': {"quodlibet": recursive_include("quodlibet", "images",
             ("svg", "png", "cache", "theme"))},
-        'scripts': ["quodlibet.py", "exfalso.py"],
+        'scripts': ["quodlibet.py", "exfalso.py", "operon.py"],
         'po_directory': "po",
         'po_package': "quodlibet",
         'shortcuts': ["quodlibet.desktop", "exfalso.desktop"],
-        'man_pages': ["man/quodlibet.1", "man/exfalso.1"],
+        'man_pages': ["man/quodlibet.1", "man/exfalso.1", "man/operon.1"],
         }
     if os.name == 'nt':
         # (probably) necessary to get the right DLLs pulled in by py2exe

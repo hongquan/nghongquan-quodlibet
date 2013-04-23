@@ -22,7 +22,9 @@ class Window(gtk.Window):
     instances = []
 
     __gsignals__ = {"close-accel": (
-        gobject.SIGNAL_RUN_LAST|gobject.SIGNAL_ACTION, gobject.TYPE_NONE, ())}
+        gobject.SIGNAL_RUN_LAST | gobject.SIGNAL_ACTION, gobject.TYPE_NONE, ())
+    }
+
     def __init__(self, *args, **kwargs):
         dialog = kwargs.pop("dialog", True)
         super(Window, self).__init__(*args, **kwargs)
@@ -34,8 +36,8 @@ class Window(gtk.Window):
         self.set_position(gtk.WIN_POS_CENTER_ON_PARENT)
         self.add_accel_group(self.__accels)
         if not dialog:
-            self.add_accelerator(
-                'close-accel', self.__accels, ord('w'), gtk.gdk.CONTROL_MASK, 0)
+            self.add_accelerator('close-accel', self.__accels,
+                                 ord('w'), gtk.gdk.CONTROL_MASK, 0)
         else:
             esc, mod = gtk.accelerator_parse("Escape")
             self.add_accelerator('close-accel', self.__accels, esc, mod, 0)
@@ -61,8 +63,8 @@ class Window(gtk.Window):
         #Do not close the window if we edit a gtk.CellRendererText.
         #Focus the treeview instead.
         if isinstance(self.get_focus(), gtk.Entry) and \
-            isinstance(self.get_focus().parent, gtk.TreeView):
-            self.get_focus().parent.grab_focus()
+            isinstance(self.get_focus().get_parent(), gtk.TreeView):
+            self.get_focus().get_parent().grab_focus()
             return
         if not self.emit('delete-event', gtk.gdk.Event(gtk.gdk.DELETE)):
             self.destroy()
@@ -153,10 +155,10 @@ class UniqueWindow(Window):
 
     __window = None
 
-    def __new__(klass, *args):
+    def __new__(klass, *args, **kwargs):
         window = klass.__window
         if window is None:
-            return super(UniqueWindow, klass).__new__(klass, *args)
+            return super(UniqueWindow, klass).__new__(klass, *args, **kwargs)
         #Look for widgets in the args, if there is one and it has
         #a new top level window, reparent and reposition the window.
         widgets = filter(lambda x: isinstance(x, gtk.Widget), args)
@@ -176,8 +178,10 @@ class UniqueWindow(Window):
             return True
 
     def __init__(self, *args, **kwargs):
-        if type(self).__window: return
-        else: type(self).__window = self
+        if type(self).__window:
+            return
+        else:
+            type(self).__window = self
         super(UniqueWindow, self).__init__(*args, **kwargs)
         self.connect_object('destroy', self.__destroy, self)
 

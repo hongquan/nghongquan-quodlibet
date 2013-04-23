@@ -41,6 +41,7 @@ DEFAULT_CONFIG = {
 ><~year|<~year>>""",
 }
 
+
 def get_conf_value(name, accessor="get"):
     try:
         value = getattr(config, accessor)("plugins", "notify_%s" % name)
@@ -51,8 +52,10 @@ def get_conf_value(name, accessor="get"):
 get_conf_bool = lambda name: get_conf_value(name, "getboolean")
 get_conf_int = lambda name: get_conf_value(name, "getint")
 
+
 def set_conf_value(name, value):
     config.set("plugins", "notify_%s" % name, unicode(value))
+
 
 class PreferencesWidget(gtk.VBox):
     def __init__(self, parent, plugin_instance):
@@ -144,7 +147,7 @@ class PreferencesWidget(gtk.VBox):
         only_user_radio = gtk.RadioButton(label=_(
             "Only on <i>_manual</i> song changes"
         ))
-        only_user_radio.child.set_use_markup(True)
+        only_user_radio.get_child().set_use_markup(True)
         only_user_radio.connect("toggled", self.on_radiobutton_toggled,
                                 "show_notifications", "user")
         radio_box.pack_start(only_user_radio)
@@ -152,7 +155,7 @@ class PreferencesWidget(gtk.VBox):
         only_auto_radio = gtk.RadioButton(only_user_radio, label=_(
             "Only on <i>_automatic</i> song changes"
         ))
-        only_auto_radio.child.set_use_markup(True)
+        only_auto_radio.get_child().set_use_markup(True)
         only_auto_radio.connect("toggled", self.on_radiobutton_toggled,
                                 "show_notifications", "auto")
         radio_box.pack_start(only_auto_radio)
@@ -160,7 +163,7 @@ class PreferencesWidget(gtk.VBox):
         all_radio = gtk.RadioButton(only_user_radio, label=_(
             "On <i>a_ll</i> song changes"
         ))
-        all_radio.child.set_use_markup(True)
+        all_radio.get_child().set_use_markup(True)
         all_radio.connect("toggled", self.on_radiobutton_toggled,
                           "show_notifications", "all")
         radio_box.pack_start(all_radio)
@@ -342,7 +345,7 @@ class Notify(EventPlugin):
                 # propably preview
                 iface, caps, spec = self.__get_interface()
 
-        except dbus.DBusException, e:
+        except dbus.DBusException:
             print_w("[notify] %s" %
                     _("Couldn't connect to notification daemon."))
             self.__disconnect()
@@ -417,8 +420,8 @@ class Notify(EventPlugin):
         if not song:
             self.close_notification()
         if get_conf_value("show_notifications") in [typ, "all"] \
-                and not (get_conf_bool("show_only_when_unfocused") \
-                     and app.window.has_toplevel_focus()) \
+                and not (get_conf_bool("show_only_when_unfocused")
+                         and app.window.has_toplevel_focus()) \
                 or self.__force_notification:
             def idle_show(song):
                 self.show_notification(song)

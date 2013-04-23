@@ -16,9 +16,9 @@ from quodlibet import browsers
 from quodlibet import config
 from quodlibet import const
 from quodlibet import formats
-from quodlibet import player
 from quodlibet import qltk
 from quodlibet import util
+from quodlibet import app
 
 from quodlibet.formats.remote import RemoteFile
 from quodlibet.qltk.browser import LibraryBrowser
@@ -42,8 +42,9 @@ from quodlibet.qltk.x import RPaned, Alignment, ScrolledWindow
 from quodlibet.qltk.about import AboutQuodLibet
 from quodlibet.util import copool, gobject_weak
 from quodlibet.util.uri import URI
-from quodlibet.util.library import background_filter
+from quodlibet.util.library import background_filter, scan_libary
 from quodlibet.qltk.window import PersistentWindowMixin
+
 
 class MainSongList(SongList):
     # The SongList that represents the current playlist.
@@ -58,14 +59,15 @@ class MainSongList(SongList):
             row = model[iter]
             if row.path == model.current_path:
                 if model.sourced:
-                    stock_icon = pixbuf[player.playlist.paused]
+                    stock_icon = pixbuf[app.player.paused]
                 else:
                     stock_icon = gtk.STOCK_MEDIA_STOP
             elif row[0].get("~errors"):
                 stock_icon = gtk.STOCK_DIALOG_ERROR
             else:
                 stock_icon = ''
-            if self.__last_stock == stock_icon: return
+            if self.__last_stock == stock_icon:
+                return
             self.__last_stock = stock_icon
             cell.set_property('stock-id', stock_icon)
 
@@ -132,9 +134,14 @@ class TopBar(gtk.HBox):
 
         # cover image
         self.image = CoverImage(resize=True)
-        player.connect('song-started', lambda x, s: self.image.set_song(s))
-        parent.connect('artwork-changed', self.__song_art_changed, library)
+        gobject_weak(player.connect, 'song-started', self.__new_song,
+                     parent=self)
+        gobject_weak(parent.connect, 'artwork-changed',
+                     self.__song_art_changed, library, parent=self)
         self.pack_start(self.image, expand=False)
+
+    def __new_song(self, player, song):
+        self.image.set_song(song)
 
     def __song_art_changed(self, player, songs, library):
         self.image.refresh()
@@ -238,7 +245,7 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
         self.songpane = gtk.VPaned()
         self.songpane.pack1(self.song_scroller, resize=True, shrink=False)
         self.songpane.pack2(self.qexpander, resize=True, shrink=False)
-        self.__handle_position =  self.songpane.get_property("position")
+        self.__handle_position = self.songpane.get_property("position")
 
         self.song_scroller.connect('notify::visible', self.__show_or)
         self.qexpander.connect('notify::visible', self.__show_or)
@@ -319,7 +326,7 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
         def seek_relative(seconds):
             current = player.get_position()
             current += seconds * 1000
-            current = min(player.song("~#length") * 1000 -1, current)
+            current = min(player.song("~#length") * 1000 - 1, current)
             current = max(0, current)
             player.seek(current)
 
@@ -341,13 +348,15 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
         if ctx.get_source_widget() is None:
             self.drag_highlight()
             return True
-        else: return False
+        else:
+            return False
 
     def __drag_leave(self, ctx, time):
         self.drag_unhighlight()
 
     def __drag_data_received(self, ctx, x, y, sel, tid, etime):
-        if tid == 1: uris = sel.get_uris()
+        if tid == 1:
+            uris = sel.get_uris()
         if tid == 2:
             uri = sel.data.decode('utf16', 'replace').split('\n')[0]
             uris = [uri.encode('ascii', 'replace')]
@@ -355,17 +364,20 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
         dirs = []
         error = False
         for uri in uris:
-            try: uri = URI(uri)
-            except ValueError: continue
+            try:
+                uri = URI(uri)
+            except ValueError:
+                continue
 
             if uri.is_filename:
                 loc = os.path.normpath(uri.filename)
-                if os.path.isdir(loc): dirs.append(loc)
+                if os.path.isdir(loc):
+                    dirs.append(loc)
                 else:
                     loc = os.path.realpath(loc)
                     if loc not in self.__library:
                         self.__library.add_filename(loc)
-            elif player.can_play_uri(uri):
+            elif app.player.can_play_uri(uri):
                 if uri not in self.__library:
                     self.__library.add([RemoteFile(uri)])
             else:
@@ -383,13 +395,16 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
                     cofuncid="library", funcid="library")
 
     def __songlist_drag_data_recv(self, view, *args):
-        if callable(self.browser.reordered): self.browser.reordered(view)
+        if callable(self.browser.reordered):
+            self.browser.reordered(view)
         self.songlist.set_sort_by(None, refresh=False)
 
     def __save_browser(self, *args):
         print_d("Saving active browser state")
-        try: self.browser.save()
-        except NotImplementedError: pass
+        try:
+            self.browser.save()
+        except NotImplementedError:
+            pass
 
     def destroy(self, *args):
         self.__save_browser()
@@ -460,10 +475,8 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
             ]
 
         if const.DEBUG:
-            from quodlibet.debug import cause_error, enc
-            actions.append(("DebugReload", gtk.STOCK_DIALOG_WARNING,
-                            _("_Edit and Continue"), None, None,
-                            lambda *args: enc.reload()))
+            def cause_error(*args):
+                raise Exception
             actions.append(("DebugCauseError", gtk.STOCK_DIALOG_ERROR,
                             _("_Cause an Error"), None, None, cause_error))
 
@@ -505,7 +518,8 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
             ("album", _("Filter on Al_bum"))]:
             act = gtk.Action(
                 "Filter%s" % util.capitalize(tag_), lab, None, gtk.STOCK_INDEX)
-            act.connect_object('activate', self.__filter_on, tag_, None, player)
+            act.connect_object('activate',
+                               self.__filter_on, tag_, None, player)
             ag.add_action_with_accel(act, None)
 
         for (tag_, accel, label) in [
@@ -538,7 +552,8 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
             (library, player))
 
         for Kind in browsers.browsers:
-            if not Kind.in_menu: continue
+            if not Kind.in_menu:
+                continue
             action = "Browser" + Kind.__name__
             label = Kind.accelerated_name
             act = gtk.Action(action, label, None, None)
@@ -549,7 +564,6 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
         if const.DEBUG:
             debug_menu = ("<separator/>"
                           "<menuitem action='OutputLog'/>"
-                          "<menuitem action='DebugReload'/>"
                           "<menuitem action='DebugCauseError'/>")
 
         self.ui = gtk.UIManager()
@@ -583,7 +597,8 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
             key = "%s_pos" % browser.__class__.__name__
             config.set("browsers", key, str(paned.get_relative()))
 
-    def select_browser(self, activator, current, library, player, restore=False):
+    def select_browser(self, activator, current, library, player,
+                       restore=False):
         if isinstance(current, gtk.RadioAction):
             current = current.get_current_value()
         Browser = browsers.get(current)
@@ -606,7 +621,8 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
             self.songlist.enable_drop()
         elif self.browser.dropped:
             self.songlist.enable_drop(False)
-        else: self.songlist.disable_drop()
+        else:
+            self.songlist.disable_drop()
         if self.browser.accelerators:
             self.add_accel_group(self.browser.accelerators)
 
@@ -626,9 +642,11 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
                 val = config.getfloat("browsers", key)
                 # Use a minimum restore size
                 val = max(val, 0.1)
-            except: val = 0.4
+            except:
+                val = 0.4
             sub.connect(
                 'notify::position', self.__browser_configure, self.browser)
+
             def set_size(paned, alloc, pos):
                 paned.set_relative(pos)
                 paned.disconnect(paned._size_sig)
@@ -648,15 +666,18 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
     def __update_paused(self, player, paused):
         menu = self.ui.get_widget("/Menu/Control/PlayPause")
 
-        if paused: key = gtk.STOCK_MEDIA_PLAY
-        else: key = gtk.STOCK_MEDIA_PAUSE
+        if paused:
+            key = gtk.STOCK_MEDIA_PLAY
+        else:
+            key = gtk.STOCK_MEDIA_PAUSE
         text = gtk.stock_lookup(key)[1]
         menu.get_image().set_from_stock(key, gtk.ICON_SIZE_MENU)
         menu.set_label(text)
         menu.set_use_underline(True)
 
     def __check_remove_song(self, player, song):
-        if song is None: return
+        if song is None:
+            return
         if not self.browser.dynamic(song):
             iter = self.songlist.model.find(song)
             if iter:
@@ -682,9 +703,11 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
         self.__update_title(player)
 
         for wid in ["Jump", "Next", "EditTags", "Information"]:
-            self.ui.get_widget('/Menu/Control/'+wid).set_sensitive(bool(song))
+            self.ui.get_widget(
+                '/Menu/Control/' + wid).set_sensitive(bool(song))
         for wid in ["FilterAlbum", "FilterArtist", "FilterGenre"]:
-            self.ui.get_widget('/Menu/Filters/'+wid).set_sensitive(bool(song))
+            self.ui.get_widget(
+                '/Menu/Filters/' + wid).set_sensitive(bool(song))
         if song:
             for h in ['genre', 'artist', 'album']:
                 self.ui.get_widget(
@@ -718,9 +741,10 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
         self.__refresh_size()
 
     def __play_pause(self, *args):
-        if player.playlist.song is None:
-            player.playlist.reset()
-        else: player.playlist.paused ^= True
+        if app.player.song is None:
+            app.player.reset()
+        else:
+            app.player.paused ^= True
 
     def __jump_to_current(self, explicit):
         """Select/scroll to the current playing song in the playlist.
@@ -732,37 +756,41 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
         """
 
         def jump_to(song, select=True):
-            model =  self.songlist.model
+            model = self.songlist.model
             if song == model.current:
                 path = model.current_path
             else:
                 iter = model.find(song)
-                if iter is None: return
+                if iter is None:
+                    return
                 path = model[iter].path
 
             self.songlist.scroll_to_cell(path, use_align=True, row_align=0.5)
             if select:
                 self.songlist.set_cursor(path)
 
-        song = player.playlist.song
-        model =  self.songlist.model
+        song = app.player.song
+        model = self.songlist.model
 
         # We are not playing a song
-        if song is None: return
+        if song is None:
+            return
 
         # model.find because the source could be the queue
         if song == model.current or (model.find(song) and explicit):
             jump_to(song, select=explicit)
         elif explicit:
-            self.browser.scroll(player.playlist.song)
+            self.browser.scroll(app.player.song)
             # We need to wait until the browser has finished
             # scrolling/filling and the songlist is ready.
             # Not perfect, but works for now.
             gobject.idle_add(jump_to, song, priority=gobject.PRIORITY_LOW)
 
-    def __next_song(self, *args): player.playlist.next()
-    def __previous_song(self, *args): player.playlist.previous()
+    def __next_song(self, *args):
+        app.player.next()
 
+    def __previous_song(self, *args):
+        app.player.previous()
 
     def __random(self, item, key):
         self.browser.filter_random(key)
@@ -787,10 +815,7 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
                 self.__make_query("#(playcount > %d)" % (songs[-40] - 1))
 
     def __rebuild(self, activator, force):
-        paths = util.split_scan_dirs(config.get("settings", "scan"))
-        exclude = config.get("library", "exclude").split(":")
-        copool.add(self.__library.rebuild,
-                   paths, force, exclude, cofuncid="library", funcid="library")
+        scan_libary(self.__library, force)
 
     # Set up the preferences window.
     def __preferences(self, activator):
@@ -807,12 +832,12 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
             if not util.uri_is_valid(name):
                 ErrorMessage(
                     self, _("Unable to add location"),
-                    _("<b>%s</b> is not a valid location.") %(
+                    _("<b>%s</b> is not a valid location.") % (
                     util.escape(name))).run()
-            elif not player.can_play_uri(name):
+            elif not app.player.can_play_uri(name):
                 ErrorMessage(
                     self, _("Unable to add location"),
-                    _("<b>%s</b> uses an unsupported protocol.") %(
+                    _("<b>%s</b> uses an unsupported protocol.") % (
                     util.escape(name))).run()
             else:
                 if name not in self.__library:
@@ -842,7 +867,8 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
             else:
                 self.last_dir = os.path.basename(fns[0])
                 for filename in map(os.path.realpath, map(util.fsnative, fns)):
-                    if filename in self.__library: continue
+                    if filename in self.__library:
+                        continue
                     song = self.__library.add_filename(filename)
                     if not song:
                         from traceback import format_exception_only as feo
@@ -860,7 +886,8 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
         if cb and cb.get_active():
             dirs = util.split_scan_dirs(config.get("settings", "scan"))
             for fn in fns:
-                if fn not in dirs: dirs.append(fn)
+                if fn not in dirs:
+                    dirs.append(fn)
             dirs = ":".join(dirs)
             config.set("settings", "scan", dirs)
 
@@ -873,19 +900,21 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
                     gtk.get_current_event_time())
 
     def __current_song_prop(self, *args):
-        song = player.playlist.song
-        if song: SongProperties(self.__library.librarian, [song], parent=self)
+        song = app.player.song
+        if song:
+            SongProperties(self.__library.librarian, [song], parent=self)
 
     def __current_song_info(self, *args):
-        song = player.playlist.song
-        if song: Information(self.__library.librarian, [song], self)
+        song = app.player.song
+        if song:
+            Information(self.__library.librarian, [song], self)
 
     def __hide_menus(self):
         menus = {'genre': ["/Menu/Filters/FilterGenre",
                            "/Menu/Filters/RandomGenre"],
                  'artist': ["/Menu/Filters/FilterArtist",
                            "/Menu/Filters/RandomArtist"],
-                 'album':  ["/Menu/Filters/FilterAlbum",
+                 'album': ["/Menu/Filters/FilterAlbum",
                            "/Menu/Filters/RandomAlbum"],
                  None: ["/Menu/Filters/PlayedRecently",
                         "/Menu/Filters/AddedRecently",
@@ -899,13 +928,14 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
     def __browser_activate(self, browser):
         model = self.songlist.get_model()
         model.reset()
-        if player.playlist.go_to(model.get_iter_first(), True):
-            player.playlist.paused = False
+        if app.player.go_to(model.get_iter_first(), True):
+            app.player.paused = False
 
     def __browser_cb(self, browser, songs, sorted):
         if browser.background:
             bg = background_filter()
-            if bg: songs = filter(bg, songs)
+            if bg:
+                songs = filter(bg, songs)
         self.__set_time(songs=songs)
         self.songlist.set_songs(songs, sorted)
 
@@ -933,15 +963,18 @@ class QuodLibetWindow(gtk.Window, PersistentWindowMixin):
                     if tag in self.browser.headers:
                         column.set_visible(True)
                         break
-                else: column.set_visible(False)
+                else:
+                    column.set_visible(False)
 
     def __cols_changed(self, songlist):
         headers = [col.header_name for col in songlist.get_columns()]
-        try: headers.remove('~current')
-        except ValueError: pass
-        if len(headers) == len(config.get("settings", "headers").split()):
+        try:
+            headers.remove('~current')
+        except ValueError:
+            pass
+        if len(headers) == len(config.get_columns()):
             # Not an addition or removal (handled separately)
-            config.set("settings", "headers", " ".join(headers))
+            config.set_columns(headers)
             SongList.headers = headers
 
     def __make_query(self, query):

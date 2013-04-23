@@ -22,8 +22,12 @@ from quodlibet import config
 from quodlibet.util.uri import URI
 from quodlibet.util import HashableDict
 from quodlibet.util import human_sort_key as human
+from quodlibet.util.dprint import print_d, print_w
+
+# Used by __init__.py
 from quodlibet.util.tags import STANDARD_TAGS as USEFUL_TAGS
 from quodlibet.util.tags import MACHINE_TAGS
+
 
 MIGRATE = frozenset(("~#playcount ~#laststarted ~#lastplayed ~#added "
            "~#skipcount ~#rating ~bookmark").split())
@@ -50,6 +54,7 @@ FILESYSTEM_TAGS = "~filename ~basename ~dirname".split()
 
 # tags that should alone identify an album, ordered by descending preference
 UNIQUE_ALBUM_IDENTIFIERS = ["musicbrainz_albumid", "labelid"]
+
 
 class AudioFile(dict):
     """An audio file. It looks like a dict, but implements synthetic
@@ -91,7 +96,7 @@ class AudioFile(dict):
         """Returns a fast sort function for a specific tag (or pattern).
         Some keys are already in the sort cache, so we can use them."""
         def artist_sort(song):
-            return (song.sort_key[1][2])
+            return song.sort_key[1][2]
 
         if callable(tag):
             return lambda song: human(tag(song))
@@ -113,7 +118,6 @@ class AudioFile(dict):
 
     def __setitem__(self, key, value):
         dict.__setitem__(self, key, value)
-
         if not self.__dict__:
             return
         pop = self.__dict__.pop
@@ -123,7 +127,6 @@ class AudioFile(dict):
 
     def __delitem__(self, key):
         dict.__delitem__(self, key)
-
         if not self.__dict__:
             return
         pop = self.__dict__.pop
@@ -131,15 +134,20 @@ class AudioFile(dict):
         pop("sort_key", None)
         pop("__song_key", None)
 
-    key = property(lambda self: self["~filename"])
-    mountpoint = property(lambda self: self["~mountpoint"])
+    @property
+    def key(self):
+        return self["~filename"]
+
+    @property
+    def mountpoint(self):
+        return self["~mountpoint"]
 
     def _album_id_values(self, use_artist=False):
         """Returns a "best attempt" conjunction (=AND) of album identifiers
 
         Tries the (probably) most specific keys first, then gets less accurate
         but more verbose (eg artist="foo" AND album="bar").
-        
+
         if use_artist is True, the track artist will also be used as a key if
         necessary. This breaks compilations, but does well for overloaded
         album names (eg "Greatest Hits")
@@ -147,24 +155,30 @@ class AudioFile(dict):
         ret = HashableDict()
         for key in UNIQUE_ALBUM_IDENTIFIERS:
             val = self.get(key)
-            if val: 
+            if val:
                 ret[key] = val
                 break
         if not ret and "album" in self:
             # Add helpful identifiers where they exist
             for key in ["album", "albumartist", "album_grouping_key"]:
                 val = self.get(key)
-                if val: ret[key] = val
-            if use_artist and "albumartist" not in ret and "artist" in self: 
+                if val:
+                    ret[key] = val
+            if use_artist and "albumartist" not in ret and "artist" in self:
                 ret["artist"] = self.get("artist")
         return ret
 
+    """Returns a dict of tag:value items that together identify this song's
+    album"""
     album_id_values = property(_album_id_values)
 
     def __cmp__(self, other):
-        if not other: return -1
-        try: return cmp(self.sort_key, other.sort_key)
-        except AttributeError: return -1
+        if not other:
+            return -1
+        try:
+            return cmp(self.sort_key, other.sort_key)
+        except AttributeError:
+            return -1
 
     def __hash__(self):
         # Dicts aren't hashable by default, so we need a hash
@@ -187,7 +201,8 @@ class AudioFile(dict):
         fn = self["~filename"]
         saved = {}
         for key in self:
-            if key in MIGRATE: saved[key] = self[key]
+            if key in MIGRATE:
+                saved[key] = self[key]
         self.clear()
         self["~filename"] = fn
         self.__init__(fn)
@@ -213,22 +228,29 @@ class AudioFile(dict):
             key = key[1:]
             if "~" in key:
                 # FIXME: decode ~filename etc.
-                if not isinstance(default, basestring): return default
+                if not isinstance(default, basestring):
+                    return default
                 return connector.join(
                     filter(None,
                     map(lambda x: isinstance(x, basestring) and x or str(x),
                     map(lambda x: (isinstance(x, float) and "%.2f" % x) or x,
                     map(self.__call__, util.tagsplit("~" + key)))))) or default
             elif key == "#track":
-                try: return int(self["tracknumber"].split("/")[0])
-                except (ValueError, TypeError, KeyError): return default
+                try:
+                    return int(self["tracknumber"].split("/")[0])
+                except (ValueError, TypeError, KeyError):
+                    return default
             elif key == "#disc":
-                try: return int(self["discnumber"].split("/")[0])
-                except (ValueError, TypeError, KeyError): return default
+                try:
+                    return int(self["discnumber"].split("/")[0])
+                except (ValueError, TypeError, KeyError):
+                    return default
             elif key == "length":
                 length = self.get("~#length")
-                if length is None: return default
-                else: return util.format_time(length)
+                if length is None:
+                    return default
+                else:
+                    return util.format_time(length)
             elif key == "#rating":
                 return dict.get(self, "~" + key, const.DEFAULT_RATING)
             elif key == "rating":
@@ -236,7 +258,8 @@ class AudioFile(dict):
             elif key == "people":
                 join = "\n".join
                 people = filter(None, map(self.__call__, PEOPLE))
-                if not people: return default
+                if not people:
+                    return default
                 people = join(people).split("\n")
                 index = people.index
                 return join([person for (i, person) in enumerate(people)
@@ -272,7 +295,8 @@ class AudioFile(dict):
                             i += 1
                         values.append("%s (%s)" % (performer, roles))
                 values.extend(self.list("performer"))
-                if not values: return default
+                if not values:
+                    return default
                 return "\n".join(values)
             elif key == "performerssort" or key == "performersort":
                 values = []
@@ -289,7 +313,8 @@ class AudioFile(dict):
             elif key == "dirname":
                 return os.path.dirname(self["~filename"]) or self["~filename"]
             elif key == "uri":
-                try: return self["~uri"]
+                try:
+                    return self["~uri"]
                 except KeyError:
                     return URI.frompath(self["~filename"])
             elif key == "format":
@@ -297,25 +322,36 @@ class AudioFile(dict):
             elif key == "year":
                 return self.get("date", default)[:4]
             elif key == "#year":
-                try: return int(self.get("date", default)[:4])
-                except (ValueError, TypeError, KeyError): return default
+                try:
+                    return int(self.get("date", default)[:4])
+                except (ValueError, TypeError, KeyError):
+                    return default
             elif key == "originalyear":
                 return self.get("originaldate", default)[:4]
             elif key == "#originalyear":
-                try: return int(self.get("originaldate", default)[:4])
-                except (ValueError, TypeError, KeyError): return default
+                try:
+                    return int(self.get("originaldate", default)[:4])
+                except (ValueError, TypeError, KeyError):
+                    return default
             elif key == "#tracks":
-                try: return int(self["tracknumber"].split("/")[1])
+                try:
+                    return int(self["tracknumber"].split("/")[1])
                 except (ValueError, IndexError, TypeError, KeyError):
                     return default
             elif key == "#discs":
-                try: return int(self["discnumber"].split("/")[1])
+                try:
+                    return int(self["discnumber"].split("/")[1])
                 except (ValueError, IndexError, TypeError, KeyError):
                     return default
             elif key == "lyrics":
-                try: fileobj = file(self.lyric_filename, "rU")
-                except EnvironmentError: return default
-                else: return fileobj.read().decode("utf-8", "replace")
+                try:
+                    fileobj = file(self.lyric_filename, "rU")
+                except EnvironmentError:
+                    return default
+                else:
+                    return fileobj.read().decode("utf-8", "replace")
+            elif key == "filesize":
+                return util.format_size(self("~#filesize", 0))
             elif key == "playlists":
                 # See Issue 876
                 # Avoid circular references from formats/__init__.py
@@ -326,20 +362,28 @@ class AudioFile(dict):
                 try:
                     val = self.get(key[1:], default)
                     return round(float(val.split(" ")[0]), 2)
-                except (ValueError, TypeError, AttributeError): return default
+                except (ValueError, TypeError, AttributeError):
+                    return default
             elif key[:1] == "#":
                 key = "~" + key
-                if key in self: self[key]
+                if key in self:
+                    return self[key]
                 elif key in INTERN_NUM_DEFAULT:
                     return dict.get(self, key, 0)
                 else:
-                    try: val = self[key[2:]]
-                    except KeyError: return default
-                    try: return int(val)
+                    try:
+                        val = self[key[2:]]
+                    except KeyError:
+                        return default
+                    try:
+                        return int(val)
                     except ValueError:
-                        try: return float(val)
-                        except ValueError: return default
-            else: return dict.get(self, "~" + key, default)
+                        try:
+                            return float(val)
+                        except ValueError:
+                            return default
+            else:
+                return dict.get(self, "~" + key, default)
 
         elif key == "title":
             title = dict.get(self, "title")
@@ -347,27 +391,38 @@ class AudioFile(dict):
                 basename = self("~basename")
                 basename = basename.decode(const.FSCODING, "replace")
                 return "%s [%s]" % (basename, _("Unknown"))
-            else: return title
+            else:
+                return title
         elif key in SORT_TO_TAG:
-            try: return self[key]
+            try:
+                return self[key]
             except KeyError:
                 key = SORT_TO_TAG[key]
         return dict.get(self, key, default)
 
-    lyric_filename = property(lambda self: util.fsencode(
-        os.path.join(util.expanduser("~/.lyrics"),
-                     (self.comma("lyricist") or self.comma("artist")).replace('/', '')[:128],
-                     self.comma("title").replace('/', '')[:128] + '.lyric')))
+    @property
+    def lyric_filename(self):
+        """Returns the (potential) lyrics filename for this file"""
+        # TODO: Use better filesystem sanitisation for lyrics file path.
+        filename = self.comma("title").replace('/', '')[:128] + '.lyric'
+        sub_dir = ((self.comma("lyricist") or self.comma("artist"))
+                  .replace('/', '')[:128])
+        path = os.path.join(util.expanduser("~/.lyrics"), sub_dir, filename)
+        return util.fsencode(path)
 
     def comma(self, key):
         """Get all values of a tag, separated by commas. Synthetic
         tags are supported, but will be slower. If the value is
         numeric, that is returned rather than a list."""
 
-        if "~" in key or key == "title": v = self(key, u"")
-        else: v = self.get(key, u"")
-        if isinstance(v, (int, long, float)): return v
-        else: return v.replace("\n", ", ")
+        if "~" in key or key == "title":
+            v = self(key, u"")
+        else:
+            v = self.get(key, u"")
+        if isinstance(v, (int, long, float)):
+            return v
+        else:
+            return v.replace("\n", ", ")
 
     def list(self, key):
         """Get all values of a tag, as a list. Synthetic tags are supported,
@@ -378,10 +433,14 @@ class AudioFile(dict):
 
         if "~" in key or key == "title":
             v = self(key, connector="\n")
-            if v == "": return []
-            else: return v.split("\n")
-        elif key in self: return self[key].split("\n")
-        else: return []
+            if v == "":
+                return []
+            else:
+                return v.split("\n")
+        elif key in self:
+            return self[key].split("\n")
+        else:
+            return []
 
     def list_separate(self, key, connector=" - "):
         """Similar to list, but will return a list of all combinations
@@ -395,7 +454,7 @@ class AudioFile(dict):
             vals = (val.split("\n") for val in vals)
             r = [[]]
             for x in vals:
-                r = [ i + [y] for y in x for i in r ]
+                r = [i + [y] for y in x for i in r]
             return map(connector.join, r)
         else:
             return self.list(key)
@@ -426,18 +485,30 @@ class AudioFile(dict):
         should be checked before adding)."""
 
         if k is None:
-            if os.access(self["~filename"], os.W_OK): return True
-            else: return []
-        else: return (k and "=" not in k and "~" not in k
-                      and k.encode("ascii", "replace") == k
-                      and os.access(self["~filename"], os.W_OK))
+            if os.access(self["~filename"], os.W_OK):
+                return True
+            else:
+                return []
+
+        try:
+            if isinstance(k, unicode):
+                k = k.encode("ascii")
+            else:
+                k.decode("ascii")
+        except UnicodeError:
+            return False
+
+        return (k and "=" not in k and "~" not in k
+                and os.access(self["~filename"], os.W_OK))
 
     def rename(self, newname):
         """Rename a file. Errors are not handled. This shouldn't be used
         directly; use library.rename instead."""
 
-        if os.path.isabs(newname): util.mkdir(os.path.dirname(newname))
-        else: newname = os.path.join(self('~dirname'), newname)
+        if os.path.isabs(newname):
+            util.mkdir(os.path.dirname(newname))
+        else:
+            newname = os.path.join(self('~dirname'), newname)
         if not os.path.exists(newname):
             shutil.move(self['~filename'], newname)
         elif os.path.realpath(newname) != self['~filename']:
@@ -448,16 +519,20 @@ class AudioFile(dict):
         """Look for a URL in the audio metadata, or a Google search
         if no URL can be found."""
 
-        if "website" in self: return self.list("website")[0]
+        if "website" in self:
+            return self.list("website")[0]
         for cont in self.list("contact") + self.list("comment"):
             c = cont.lower()
             if (c.startswith("http://") or c.startswith("https://") or
-                c.startswith("www.")): return cont
-            elif c.startswith("//www."): return "http:" + cont
+                    c.startswith("www.")):
+                return cont
+            elif c.startswith("//www."):
+                return "http:" + cont
         else:
             text = "http://www.google.com/search?q="
-            esc = lambda c: ord(c) > 127 and '%%%x'%ord(c) or c
-            if "labelid" in self: text += ''.join(map(esc, self["labelid"]))
+            esc = lambda c: ord(c) > 127 and '%%%x' % ord(c) or c
+            if "labelid" in self:
+                text += ''.join(map(esc, self["labelid"]))
             else:
                 artist = util.escape("+".join(self("artist").split()))
                 album = util.escape("+".join(self("album").split()))
@@ -481,8 +556,10 @@ class AudioFile(dict):
             if key in INTERN_NUM_DEFAULT and val == 0:
                 del self[key]
 
-        if filename: self["~filename"] = filename
-        elif "~filename" not in self: raise ValueError("Unknown filename!")
+        if filename:
+            self["~filename"] = filename
+        elif "~filename" not in self:
+            raise ValueError("Unknown filename!")
         if self.is_file:
             self["~filename"] = os.path.realpath(self["~filename"])
             # Find mount point (terminating at "/" if necessary)
@@ -492,8 +569,10 @@ class AudioFile(dict):
                 # Prevent infinite loop without a fully-qualified filename
                 # (the unit tests use these).
                 head = head or "/"
-                if os.path.ismount(head): self["~mountpoint"] = head
-        else: self["~mountpoint"] = "/"
+                if os.path.ismount(head):
+                    self["~mountpoint"] = head
+        else:
+            self["~mountpoint"] = "/"
 
         # Fill in necessary values.
         self.setdefault("~#added", int(time.time()))
@@ -504,14 +583,15 @@ class AudioFile(dict):
             self["~#mtime"] = stat.st_mtime
             self["~#filesize"] = stat.st_size
 
-            # Issue 342. This is a horrible approximation (due to headers)
-            # ...but on FLACs, the most common case, this should be close enough
+            # Issue 342. This is a horrible approximation (due to headers) but
+            # on FLACs, the most common case, this should be close enough
             if "~#bitrate" not in self:
                 try:
                     # kbps = bytes * 8 / seconds / 1000
                     self["~#bitrate"] = int(stat.st_size /
-                        (self["~#length"] * (1000/8)))
-                except (KeyError, ZeroDivisionError): pass
+                                            (self["~#length"] * (1000 / 8)))
+                except (KeyError, ZeroDivisionError):
+                    pass
         except OSError:
             self["~#mtime"] = 0
 
@@ -541,17 +621,21 @@ class AudioFile(dict):
     def from_dump(self, text):
         """Parses the text created with to_dump and adds the found tags."""
         for line in text.split("\n"):
-            if not line: continue
+            if not line:
+                continue
             parts = line.split("=")
             key = parts[0]
             val = "=".join(parts[1:])
             if key == "~format":
                 pass
             elif key.startswith("~#"):
-                try: self.add(key, int(val))
+                try:
+                    self.add(key, int(val))
                 except ValueError:
-                    try: self.add(key, float(val))
-                    except ValueError: pass
+                    try:
+                        self.add(key, float(val))
+                    except ValueError:
+                        pass
             else:
                 self.add(key, val)
 
@@ -560,30 +644,37 @@ class AudioFile(dict):
         If the old value is not found, set the key to the new value."""
         try:
             parts = self.list(key)
-            try: parts[parts.index(old_value)] = new_value
+            try:
+                parts[parts.index(old_value)] = new_value
             except ValueError:
                 self[key] = new_value
             else:
                 self[key] = "\n".join(parts)
-        except KeyError: self[key] = new_value
+        except KeyError:
+            self[key] = new_value
 
     def add(self, key, value):
         """Add a value for the given metadata key."""
-        if key not in self: self[key] = value
-        else: self[key] += "\n" + value
+        if key not in self:
+            self[key] = value
+        else:
+            self[key] += "\n" + value
 
     def remove(self, key, value):
         """Remove a value from the given key; if the value is not found,
         remove all values for that key."""
-        if key not in self: return
-        elif self[key] == value: del(self[key])
+        if key not in self:
+            return
+        elif self[key] == value:
+            del(self[key])
         else:
             try:
                 parts = self.list(key)
                 parts.remove(value)
                 self[key] = "\n".join(parts)
             except ValueError:
-                if key in self: del(self[key])
+                if key in self:
+                    del(self[key])
 
     # These should remain outside the loop below for performance reasons
     __cover_subdirs = frozenset(
@@ -593,16 +684,17 @@ class AudioFile(dict):
     __cover_positive_words = ["front", "cover", "frontcover", "jacket",
             "folder", "albumart", "edited"]
     __cover_positive_regexes = frozenset(
-            map(lambda s:re.compile(r'(\b|_)' + s + r'(\b|_)'),
+            map(lambda s: re.compile(r'(\b|_)' + s + r'(\b|_)'),
             __cover_positive_words))
     __cover_negative_regexes = frozenset(
-            map(lambda s:re.compile(r'(\b|_|)' + s + r'(\b|_)'),
+            map(lambda s: re.compile(r'(\b|_|)' + s + r'(\b|_)'),
             ["back", "inlay", "inset", "inside"]))
 
     def find_cover(self):
         """Return a file-like containing cover image data, or None if
         no cover is available."""
-        if not self.is_file: return
+        if not self.is_file:
+            return
 
         # If preferred, check for picture stored in the metadata...
         if (config.getboolean("albumart", "prefer_embedded") and
@@ -622,8 +714,10 @@ class AudioFile(dict):
             get_ext = lambda s: os.path.splitext(s)[1].lstrip('.')
 
             entries = []
-            try: entries = os.listdir(base)
-            except EnvironmentError: pass
+            try:
+                entries = os.listdir(base)
+            except EnvironmentError:
+                pass
 
             fns = []
             for entry in entries:
@@ -633,8 +727,10 @@ class AudioFile(dict):
                 if lentry in self.__cover_subdirs:
                     subdir = os.path.join(base, entry)
                     sub_entries = []
-                    try: sub_entries = os.listdir(subdir)
-                    except EnvironmentError: pass
+                    try:
+                        sub_entries = os.listdir(subdir)
+                    except EnvironmentError:
+                        pass
                     for sub_entry in sub_entries:
                         lsub_entry = sub_entry.lower()
                         if get_ext(lsub_entry) in self.__cover_exts:
@@ -648,8 +744,8 @@ class AudioFile(dict):
                     score += 20
 
                 # Track-related keywords
-                keywords =  [k.lower().strip() for k in [self("artist"),
-                             self("albumartist"), self("album")] if len(k) > 1]
+                keywords = [k.lower().strip() for k in [self("artist"),
+                            self("albumartist"), self("album")] if len(k) > 1]
                 score += 2 * sum(map(lfn.__contains__, keywords))
 
                 # Generic keywords
@@ -671,8 +767,10 @@ class AudioFile(dict):
             # could be a directory
             if not os.path.isfile(path):
                 continue
-            try: return file(path, "rb")
-            except IOError: print_w(_("Failed reading album art \"%s\"") % path)
+            try:
+                return file(path, "rb")
+            except IOError:
+                print_w(_("Failed reading album art \"%s\"") % path)
 
         if "~picture" in self:
             # Otherwise, we might have a picture stored in the metadata...
@@ -699,12 +797,12 @@ class AudioFile(dict):
                 continue
             else:
                 db += pre_amp_gain
-                scale = 10.**(db / 20)
+                scale = 10. ** (db / 20)
                 if scale * peak > 1:
-                    scale = 1.0 / peak # don't clip
+                    scale = 1.0 / peak  # don't clip
                 return min(15, scale)
         else:
-            return min(15, 10.**((fallback_gain+pre_amp_gain) / 20))
+            return min(15, 10. ** ((fallback_gain + pre_amp_gain) / 20))
 
     def write(self):
         """Write metadata back to the file."""
@@ -714,14 +812,20 @@ class AudioFile(dict):
         marks = []
         invalid = []
         for line in self.list("~bookmark"):
-            try: time, mark = line.split(" ", 1)
-            except: invalid.append((-1, line))
+            try:
+                time, mark = line.split(" ", 1)
+            except:
+                invalid.append((-1, line))
             else:
-                try: time = util.parse_time(time, None)
-                except: invalid.append((-1, line))
+                try:
+                    time = util.parse_time(time, None)
+                except:
+                    invalid.append((-1, line))
                 else:
-                    if time >= 0: marks.append((time, mark))
-                    else: invalid.append((-1, line))
+                    if time >= 0:
+                        marks.append((time, mark))
+                    else:
+                        invalid.append((-1, line))
         marks.sort()
         marks.extend(invalid)
         return marks
@@ -729,11 +833,14 @@ class AudioFile(dict):
     def __set_bookmarks(self, marks):
         result = []
         for time, mark in marks:
-            if time < 0: raise ValueError("mark times must be positive")
+            if time < 0:
+                raise ValueError("mark times must be positive")
             result.append(u"%s %s" % (util.format_time(time), mark))
         result = u"\n".join(result)
-        if result: self["~bookmark"] = result
-        elif "~bookmark" in self: del(self["~bookmark"])
+        if result:
+            self["~bookmark"] = result
+        elif "~bookmark" in self:
+            del(self["~bookmark"])
 
     bookmarks = property(
         __get_bookmarks, __set_bookmarks,

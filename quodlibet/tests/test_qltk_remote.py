@@ -52,6 +52,7 @@ class TFIFOControl(TestCase):
         self.fifo = FIFOControl(self.l, self.w, self.p)
 
     def tearDown(self):
+        self.fifo.destroy()
         self.p.destroy()
         self.l.destroy()
         self.w.destroy()
@@ -95,7 +96,7 @@ class TFIFOControl(TestCase):
         #self.__send("queue 1")
         self.__send("quit")
         #self.__send("random album")
-        #self.__send("refresh")
+        self.__send("refresh")
         #self.__send("repeat 0")
         #self.__send("set-browser 1")
         self.__send("set-rating 0.5")

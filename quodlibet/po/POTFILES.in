@@ -1,5 +1,6 @@
 exfalso.desktop.in
 exfalso.py
+operon.py
 quodlibet/browsers/albums.py
 quodlibet/browsers/audiofeeds.py
 quodlibet/browsers/_base.py
@@ -11,7 +12,6 @@ quodlibet/browsers/media.py
 quodlibet/browsers/paned.py
 quodlibet/browsers/playlists.py
 quodlibet/browsers/search.py
-quodlibet/debug/debugwindow.py
 quodlibet.desktop.in
 quodlibet/devices/_base.py
 quodlibet/devices/__init__.py
@@ -21,8 +21,7 @@ quodlibet/formats/_audio.py
 quodlibet/formats/__init__.py
 quodlibet/__init__.py
 quodlibet/library/__init__.py
-quodlibet/library/_library.py
-quodlibet/library/songs.py
+quodlibet/library/libraries.py
 quodlibet/player/gstbe.py
 quodlibet/player/_gstutils.py
 quodlibet/player/__init__.py
@@ -35,6 +34,7 @@ quodlibet/qltk/browser.py
 quodlibet/qltk/cbes.py
 quodlibet/qltk/chooser.py
 quodlibet/qltk/controls.py
+quodlibet/qltk/debugwindow.py
 quodlibet/qltk/delete.py
 quodlibet/qltk/downloader.py
 quodlibet/qltk/_editpane.py
@@ -56,6 +56,7 @@ quodlibet/qltk/quodlibetwindow.py
 quodlibet/qltk/ratingsmenu.py
 quodlibet/qltk/remote.py
 quodlibet/qltk/renamefiles.py
+quodlibet/qltk/scanbox.py
 quodlibet/qltk/searchbar.py
 quodlibet/qltk/songlist.py
 quodlibet/qltk/songsmenu.py
@@ -70,6 +71,7 @@ quodlibet/qltk/x.py
 quodlibet/util/collection.py
 quodlibet/util/dprint.py
 quodlibet/util/__init__.py
+quodlibet/util/library.py
 quodlibet/util/logging.py
 quodlibet/util/massagers.py
 quodlibet/util/songwrapper.py

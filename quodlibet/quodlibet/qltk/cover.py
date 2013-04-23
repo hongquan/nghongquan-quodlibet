@@ -12,7 +12,6 @@ import gtk
 
 from quodlibet import qltk
 from quodlibet import config
-from quodlibet import print_d
 from quodlibet.util import thumbnails
 
 
@@ -39,18 +38,26 @@ class BigCenteredImage(qltk.Window):
         self.set_decorated(False)
         self.set_position(gtk.WIN_POS_CENTER)
         self.set_modal(False)
-        self.add(gtk.Frame())
-        self.child.set_shadow_type(gtk.SHADOW_OUT)
-        self.child.add(gtk.EventBox())
-        self.child.child.add(gtk.Image())
-        self.child.child.child.set_from_pixbuf(pixbuf)
 
-        self.child.child.connect('button-press-event', self.__destroy)
-        self.child.child.connect('key-press-event', self.__destroy)
+        image = gtk.Image()
+        image.set_from_pixbuf(pixbuf)
+
+        event_box = gtk.EventBox()
+        event_box.add(image)
+
+        frame = gtk.Frame()
+        frame.set_shadow_type(gtk.SHADOW_OUT)
+        frame.add(event_box)
+
+        self.add(frame)
+
+        event_box.connect('button-press-event', self.__destroy)
+        event_box.connect('key-press-event', self.__destroy)
         self.show_all()
 
     def __destroy(self, *args):
         self.destroy()
+
 
 class ResizeImage(gtk.Image):
     """Automatically resizes to the maximum height given by its
@@ -88,7 +95,8 @@ class ResizeImage(gtk.Image):
             try:
                 self.__no_cover = theme.load_icon(
                     "quodlibet-missing-cover", size, 0)
-            except gobject.GError: pass
+            except gobject.GError:
+                pass
             else:
                 self.__no_cover = thumbnails.scale(
                     self.__no_cover, (size, size))
@@ -96,7 +104,8 @@ class ResizeImage(gtk.Image):
 
     def __update_image(self):
         height = self.__size
-        if not height: return
+        if not height:
+            return
 
         if self.__resize:
             height = min(self.__max_size, height)
@@ -124,6 +133,7 @@ class ResizeImage(gtk.Image):
         self.__ignore = False
         self.disconnect(self.__sig)
 
+
 class CoverImage(gtk.EventBox):
 
     def __init__(self, resize=False, size=70, song=None):
@@ -141,10 +151,10 @@ class CoverImage(gtk.EventBox):
         self.__song = song
         if song:
             self.__file = song.find_cover()
-            self.child.set_path(self.__file and self.__file.name)
+            self.get_child().set_path(self.__file and self.__file.name)
         else:
             self.__file = None
-            self.child.set_path(None)
+            self.get_child().set_path(None)
 
     def refresh(self):
         self.set_song(self.__song)

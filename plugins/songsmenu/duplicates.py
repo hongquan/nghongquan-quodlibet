@@ -11,22 +11,22 @@
 #    it under the terms of version 2 of the GNU General Public License as
 #    published by the Free Software Foundation.
 #
-from gettext import ngettext
-from quodlibet import config, player, print_d, print_w, util, qltk
-from quodlibet.library import library
+
+import string
+import unicodedata
+
+import gtk
+import pango
+
+from quodlibet import app
+from quodlibet import print_d, print_w, util, qltk
 from quodlibet.plugins import PluginConfigMixin
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
+from quodlibet.qltk.ccb import ConfigCheckButton
 from quodlibet.qltk.edittags import AudioFileGroup
 from quodlibet.qltk.entry import UndoEntry
 from quodlibet.qltk.songsmenu import SongsMenu
 from quodlibet.qltk.views import RCMHintedTreeView
-import ConfigParser
-import gobject
-import gtk
-import pango
-import string
-import unicodedata
-from quodlibet.qltk.ccb import ConfigCheckButton
 
 
 class DuplicateSongsView(RCMHintedTreeView):
@@ -34,9 +34,11 @@ class DuplicateSongsView(RCMHintedTreeView):
 
     def get_selected_songs(self):
         selection = self.get_selection()
-        if selection is None: return []
+        if selection is None:
+            return []
         model, rows = selection.get_selected_rows()
-        if not rows: return []
+        if not rows:
+            return []
         selected = []
         for row in rows:
             row = model[row]
@@ -49,7 +51,8 @@ class DuplicateSongsView(RCMHintedTreeView):
 
     def Menu(self, library):
         songs = self.get_selected_songs()
-        if not songs: return
+        if not songs:
+            return
 
         menu = SongsMenu(
             library, songs, delete=True, parent=self, plugins=False,
@@ -72,7 +75,8 @@ class DuplicateSongsView(RCMHintedTreeView):
 
     def _removed(self, library, songs):
         model = self.get_model()
-        if not model: return
+        if not model:
+            return
         for song in songs:
             row = model.find_row(song)
             if row:
@@ -89,7 +93,8 @@ class DuplicateSongsView(RCMHintedTreeView):
 
     def _added(self, library, songs):
         model = self.get_model()
-        if not model: return
+        if not model:
+            return
         for song in songs:
             key = Duplicates.get_key(song)
             model.add_to_existing_group(key, song)
@@ -124,7 +129,7 @@ class DuplicateSongsView(RCMHintedTreeView):
     def __init__(self, model):
         super(DuplicateSongsView, self).__init__(model)
         self.connect_object('row-activated',
-                            self.__select_song, player.playlist)
+                            self.__select_song, app.player)
         # Selecting multiple is a nice feature it turns out.
         self.get_selection().set_mode(gtk.SELECTION_MULTIPLE)
 
@@ -137,23 +142,24 @@ class DuplicateSongsView(RCMHintedTreeView):
         }
         for (sig, callback) in SIGNAL_MAP.items():
             print_d("Listening to library.%s signals" % sig)
-            self.connected_library_sigs.append(library.connect(sig, callback))
+            self.connected_library_sigs.append(
+                app.library.connect(sig, callback))
 
         # And disconnect, or Bad Stuff happens.
         self.connect('destroy', self.on_destroy)
 
-
     def on_destroy(self, view):
         print_d("Disconnecting from library signals...")
         for sig in self.connected_library_sigs:
-            library.disconnect(sig)
+            app.library.disconnect(sig)
 
 
 class DuplicatesTreeModel(gtk.TreeStore):
     """A tree store to model duplicated song information"""
 
     # Define columns to display (and how, in lieu of using qltk.browsers)
-    def i(x): return x
+    def i(x):
+        return x
     TAG_MAP = [
         ("artist", i), ("title", i), ("album", i),
         ("~#length", lambda s: util.format_time(int(s))),
@@ -161,7 +167,8 @@ class DuplicatesTreeModel(gtk.TreeStore):
         ("~filename", i)]
     # Now make a dict. This seems clunky.
     tag_functions = {}
-    for t, f in TAG_MAP: tag_functions[t] = f
+    for t, f in TAG_MAP:
+        tag_functions[t] = f
 
     @classmethod
     def group_value(cls, group, tag):
@@ -188,13 +195,14 @@ class DuplicatesTreeModel(gtk.TreeStore):
         return None
 
     def add_to_existing_group(self, key, song):
-        """Tries to add a song to an existing group. Returns None if not able"""
+        """Tries to add a song to an existing group. Returns None if not able
+        """
         #print_d("Trying to add %s to group \"%s\"" % (song("~filename"), key))
         for parent in self:
             if key == parent[0]:
                 print_d("Found group", self)
                 return self.append(parent.iter, self.__make_row(song))
-            # TODO: update group 
+            # TODO: update group
         return None
 
     @classmethod
@@ -213,7 +221,6 @@ class DuplicatesTreeModel(gtk.TreeStore):
 
         for s in songs:
             self.append(parent, self.__make_row(s))
-
 
     def go_to(self, song, explicit=False):
         #print_d("Duplicates: told to go to %r" % song, context=self)
@@ -235,21 +242,30 @@ class DuplicatesTreeModel(gtk.TreeStore):
 
     @property
     def get_current(self):
-        if self.__iter is None: return None
-        elif self.is_empty(): return None
-        else: return self[self.__iter][0]
+        if self.__iter is None:
+            return None
+        elif self.is_empty():
+            return None
+        else:
+            return self[self.__iter][0]
 
     @property
     def get_current_path(self):
-        if self.__iter is None: return None
-        elif self.is_empty(): return None
-        else: return self[self.__iter].path
+        if self.__iter is None:
+            return None
+        elif self.is_empty():
+            return None
+        else:
+            return self[self.__iter].path
 
     @property
     def get_current_iter(self):
-        if self.__iter is None: return None
-        elif self.is_empty(): return None
-        else: return self.__iter
+        if self.__iter is None:
+            return None
+        elif self.is_empty():
+            return None
+        else:
+            return self.__iter
 
     def is_empty(self):
         return not len(self)
@@ -271,7 +287,7 @@ class DuplicateDialog(gtk.Window):
 
     def __songs_popup_menu(self, songlist):
         path, col = songlist.get_cursor()
-        menu = songlist.Menu(library)
+        menu = songlist.Menu(app.library)
         if menu is not None:
             return songlist.popup_menu(menu, 0, gtk.get_current_event_time())
 
@@ -408,7 +424,7 @@ class Duplicates(SongsMenuPlugin, PluginConfigMixin):
             (cls._CFG_REMOVE_PUNCTUATION, _("Remove _Punctuation")),
             (cls._CFG_CASE_INSENSITIVE, _("Case _Insensitive")),
         ]
-        vb2=gtk.VBox(spacing=6)
+        vb2 = gtk.VBox(spacing=6)
         for key, label in toggles:
             ccb = ConfigCheckButton(label, 'plugins', cls._config_key(key))
             ccb.set_active(cls.config_get_bool(key))
@@ -453,17 +469,17 @@ class Duplicates(SongsMenuPlugin, PluginConfigMixin):
             elif key:
                 groups[key] = set([song._song])
 
-        for song in library:
+        for song in app.library:
             key = self.get_key(song)
             if key in groups:
                 groups[key].add(song)
 
         # Now display the grouped duplicates
         for (key, children) in groups.items():
-            if len(children) < self.MIN_GROUP_SIZE: continue
+            if len(children) < self.MIN_GROUP_SIZE:
+                continue
             # The parent (group) label
             model.add_group(key, children)
 
         dialog = DuplicateDialog(model)
         dialog.show()
-

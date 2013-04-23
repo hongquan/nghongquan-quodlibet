@@ -9,7 +9,7 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation.
 
-0<>0 # Python 3.x not supported! Use 2.6+ instead.
+0 <> 0 # Python 3.x not supported! Use 2.6+ instead.
 
 import os
 import signal
@@ -46,12 +46,12 @@ def main():
                              name="Quod Libet",
                              title=const.PROCESS_TITLE_QL)
     app.library = library
-    app.librarian = library.librarian
 
+    from quodlibet.player import PlayerError
     for backend in [config.get("player", "backend"), "nullbe"]:
         try:
             player = quodlibet.init_backend(backend, app.librarian)
-        except quodlibet.player.error, error:
+        except PlayerError, error:
             print_e("%s. %s" % (error.short_desc, error.long_desc))
         else:
             break
@@ -64,32 +64,56 @@ def main():
 
     from quodlibet.qltk.songlist import SongList
 
-    try: ratings = config.getint("settings", "ratings")
-    except (ValueError, TypeError): pass
-    else: util.RATING_PRECISION = 1.0/ratings
+    try:
+        ratings = config.getint("settings", "ratings")
+    except (ValueError, TypeError):
+        pass
+    else:
+        util.RATING_PRECISION = 1.0 / ratings
 
-    try: default_rating = config.getfloat("settings", "default_rating")
-    except (ValueError, TypeError): pass
-    else: const.DEFAULT_RATING = default_rating
+    try:
+        default_rating = config.getfloat("settings", "default_rating")
+    except (ValueError, TypeError):
+        pass
+    else:
+        const.DEFAULT_RATING = default_rating
 
-    try: symbol = config.get("settings", "rating_symbol").decode("utf-8")
-    except UnicodeDecodeError: pass
-    else: util.RATING_SYMBOL = symbol
+    try:
+        symbol = config.get("settings", "rating_symbol_full").decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    else:
+        util.RATING_SYMBOL = symbol
 
-    if config.get("settings", "headers").split() == []:
-       config.set("settings", "headers", "title")
-    headers = config.get("settings", "headers").split()
+    try:
+        symbol = config.get("settings", "rating_symbol_blank").decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    else:
+        util.RATING_SYMBOL_BLANK = symbol
+
+    from quodlibet.util.collection import Album
+    try:
+        cover_size = config.getint("browsers", "cover_size")
+    except config.Error:
+        pass
+    else:
+        if cover_size > 0:
+            Album.COVER_SIZE = cover_size
+
+    headers = config.get_columns()
     SongList.set_all_column_headers(headers)
 
     for opt in config.options("header_maps"):
         val = config.get("header_maps", opt)
         util.tags.add(opt, val)
 
-    in_all =("~filename ~uri ~#lastplayed ~#rating ~#playcount ~#skipcount "
-             "~#added ~#bitrate ~current ~#laststarted ~basename "
-             "~dirname").split()
+    in_all = ("~filename ~uri ~#lastplayed ~#rating ~#playcount ~#skipcount "
+              "~#added ~#bitrate ~current ~#laststarted ~basename "
+              "~dirname").split()
     for Kind in browsers.browsers:
-        if Kind.headers is not None: Kind.headers.extend(in_all)
+        if Kind.headers is not None:
+            Kind.headers.extend(in_all)
         Kind.init(library)
 
     pm = quodlibet.init_plugins(no_plugins)
@@ -131,7 +155,7 @@ def main():
     quodlibet.main(window)
 
     print_d("Shutting down player device %r." % player.version_info)
-    quodlibet.player.quit(player)
+    player.destroy()
     quodlibet.library.save(force=True)
 
     config.save(const.CONFIG)
@@ -158,14 +182,19 @@ def print_fifo(command):
 
             f = file(filename, "r")
             sys.stdout.write(f.read())
-            try: os.unlink(filename)
-            except EnvironmentError: pass
+            try:
+                os.unlink(filename)
+            except EnvironmentError:
+                pass
             f.close()
             quodlibet.exit()
         except TypeError:
-            try: os.unlink(filename)
-            except EnvironmentError: pass
+            try:
+                os.unlink(filename)
+            except EnvironmentError:
+                pass
             quodlibet.exit("not-running")
+
 
 def print_playing(fstring="<artist~album~tracknumber~title>"):
     from quodlibet.formats._audio import AudioFile
@@ -181,18 +210,20 @@ def print_playing(fstring="<artist~album~tracknumber~title>"):
         print_(_("No song is currently playing."))
         quodlibet.exit(True)
 
+
 def print_query(query):
     '''Queries library, dumping filenames of matches to stdout
 
         See Issue 716
     '''
-    print_d("Querying library for %r" %query)
+    print_d("Querying library for %r" % query)
     import quodlibet.library
     library = quodlibet.library.init(const.LIBRARY)
     songs = library.query(query)
     #songs.sort()
     sys.stdout.write("\n".join([song("~filename") for song in songs]) + "\n")
     quodlibet.exit()
+
 
 def isrunning():
     # http://code.google.com/p/quodlibet/issues/detail?id=1131
@@ -206,6 +237,7 @@ def isrunning():
     except OSError:
         pass
     return os.path.exists(const.CONTROL)
+
 
 def control(c):
     if not isrunning():
@@ -221,12 +253,15 @@ def control(c):
             f.close()
         except (OSError, IOError, TypeError):
             print_w(_("Unable to write to %s. Removing it.") % const.CONTROL)
-            try: os.unlink(const.CONTROL)
-            except OSError: pass
+            try:
+                os.unlink(const.CONTROL)
+            except OSError:
+                pass
             if c != 'focus':
                 raise quodlibet.exit(True)
         else:
             quodlibet.exit()
+
 
 def process_arguments():
     controls = ["next", "previous", "play", "pause", "play-pause", "stop",
@@ -266,7 +301,8 @@ def process_arguments():
         ("print-queue", _("Print the contents of the queue")),
         ("no-plugins", _("Start without plugins")),
         ("quit", _("Exit Quod Libet")),
-        ]: options.add(opt, help=help)
+            ]:
+        options.add(opt, help=help)
 
     for opt, help, arg in [
         ("seek", _("Seek within the playing song"), _("[+|-][HH:]MM:SS")),
@@ -287,11 +323,12 @@ def process_arguments():
             Q_("command|filename"), _("query"))),
         ("enqueue-files", _("Enqueue comma-separated files"), "%s[,%s..]" % (
             _("filename"), _("filename"))),
-        ("print-query", _("Print filenames of results of query to stdout"), 
+        ("print-query", _("Print filenames of results of query to stdout"),
             _("query")),
         ("unqueue", _("Unqueue a file or query"), "%s|%s" % (
             Q_("command|filename"), _("query"))),
-        ]: options.add(opt, help=help, arg=arg)
+            ]:
+        options.add(opt, help=help, arg=arg)
 
     options.add("sm-config-prefix", arg="dummy")
     options.add("sm-client-id", arg="prefix")
@@ -299,19 +336,29 @@ def process_arguments():
 
     def is_vol(str):
         if str[0] in '+-':
-            if len(str) == 1: return True
+            if len(str) == 1:
+                return True
             str = str[1:]
         return str.isdigit()
+
     def is_time(str):
-        if str[0] not in "+-0123456789": return False
-        elif str[0] in "+-": str = str[1:]
+        if str[0] not in "+-0123456789":
+            return False
+        elif str[0] in "+-":
+            str = str[1:]
         parts = str.split(":")
-        if len(parts) > 3: return False
-        else: return not (False in [p.isdigit() for p in parts])
+        if len(parts) > 3:
+            return False
+        else:
+            return not (False in [p.isdigit() for p in parts])
+
     def is_float(str):
-        try: float(str)
-        except ValueError: return False
-        else: return True
+        try:
+            float(str)
+        except ValueError:
+            return False
+        else:
+            return True
 
     validators = {
         "order": ["0", "1", "t", "toggle", "inorder", "shuffle",
@@ -324,18 +371,25 @@ def process_arguments():
 
     opts, args = options.parse()
     for command, arg in opts.items():
-        if command in controls: control(command)
+        if command in controls:
+            control(command)
         elif command in controls_opt:
             if command in validators and not validators[command](arg):
                 print_e(_("Invalid argument for '%s'.") % command)
                 print_e(_("Try %s --help.") % sys.argv[0])
                 quodlibet.exit(True)
-            else: control(command + " " + arg)
-        elif command == "status": print_fifo("status")
-        elif command == "print-playlist": print_fifo("dump-playlist")
-        elif command == "print-queue": print_fifo("dump-queue")
-        elif command == "volume-up": control("volume +")
-        elif command == "volume-down": control("volume -")
+            else:
+                control(command + " " + arg)
+        elif command == "status":
+            print_fifo("status")
+        elif command == "print-playlist":
+            print_fifo("dump-playlist")
+        elif command == "print-queue":
+            print_fifo("dump-queue")
+        elif command == "volume-up":
+            control("volume +")
+        elif command == "volume-down":
+            control("volume -")
         elif command == "enqueue" or command == "unqueue":
             try:
                 filename = URI(arg).filename
@@ -349,11 +403,15 @@ def process_arguments():
                 filename = URI(arg).filename
             except ValueError:
                 filename = os.path.abspath(util.expanduser(arg))
-            if os.path.isdir(filename): control("add-directory " + filename)
-            else: control("add-file " + filename)
+            if os.path.isdir(filename):
+                control("add-directory " + filename)
+            else:
+                control("add-file " + filename)
         elif command == "print-playing":
-            try: print_playing(args[0])
-            except IndexError: print_playing()
+            try:
+                print_playing(args[0])
+            except IndexError:
+                print_playing()
         elif command == "print-query":
             print_query(arg)
         elif command == "start-playing":

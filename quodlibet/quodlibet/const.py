@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 # Constants used in various parts of QL, mostly strings.
 
+import sys
 import os
 import locale
 
 if os.name == "nt":
     from win32com.shell import shellcon, shell
+
 
 class Version(tuple):
     """Represent the version of a dependency as a tuple"""
@@ -21,13 +23,14 @@ class Version(tuple):
     def __str__(self):
         return self.human_version()
 
+
 class MinVersions(object):
     """Dependency requirements for Quod Libet / Ex Falso"""
     PYTHON = Version(2, 6)
     PYGTK = Version((2, 16))
     MUTAGEN = Version(1, 14)
 
-VERSION_TUPLE = Version(2, 5, 1, -1)
+VERSION_TUPLE = Version(2, 5, -1)
 VERSION = str(VERSION_TUPLE)
 
 PROCESS_TITLE_QL = "quodlibet"
@@ -50,16 +53,25 @@ else:
         USERDIR = os.path.join(HOME, ".quodlibet")
 
 CONTROL = os.path.join(USERDIR, "control")
-CONFIG  = os.path.join(USERDIR, "config")
+CONFIG = os.path.join(USERDIR, "config")
 CURRENT = os.path.join(USERDIR, "current")
 LIBRARY = os.path.join(USERDIR, "songs")
-LOGDIR  = os.path.join(USERDIR, "logs")
+LOGDIR = os.path.join(USERDIR, "logs")
+
+# Don't bother saving the library more often than this
+LIBRARY_SAVE_PERIOD_SECONDS = 15 * 60
 
 DEFAULT_RATING = 0.5
 
 # entry point for the user guide / wiki
 ONLINE_HELP = "http://code.google.com/p/quodlibet/wiki/QuickStart"
 SEARCH_HELP = "http://code.google.com/p/quodlibet/wiki/SearchingGuide"
+
+# about dialog, --version etc.
+WEBSITE = "http://code.google.com/p/quodlibet"
+COPYRIGHT = """\
+Copyright © 2004-2013 Joe Wreschnig, Michael Urman, Iñigo Serna,
+Steven Robertson, Christoph Reiter, Nick Boultbee, ..."""
 
 # Email used as default for reading/saving per-user data in tags, etc.
 EMAIL = os.environ.get("EMAIL", "quodlibet@lists.sacredchao.net")
@@ -190,6 +202,10 @@ Jakub Steiner
 Fabien Devaux
 """.strip().split("\n"))
 
+# Default songlist column headers
+DEFAULT_COLUMNS = "~#track ~people ~title~version ~album~discsubtitle " \
+                  "~#length".split()
+
 TBP = os.path.join(USERDIR, "lists", "tagpatterns")
 TBP_EXAMPLES = """\
 <tracknumber>. <title>
@@ -207,7 +223,7 @@ NBP_EXAMPLES = """\
 /path/<artist> - <album>/<tracknumber>. <title>
 /path/<artist>/<album>/<tracknumber> - <title>"""
 
-DEBUG = "QUODLIBET_DEBUG" in os.environ
+DEBUG = ("--debug" in sys.argv or "QUODLIBET_DEBUG" in os.environ)
 
 MENU = """<ui>
   <menubar name='Menu'>
@@ -284,8 +300,8 @@ if "G_FILENAME_ENCODING" in os.environ:
         FSCODING = ENCODING
 elif "G_BROKEN_FILENAMES" in os.environ:
     FSCODING = ENCODING
-else: FSCODING = "utf-8"
+else:
+    FSCODING = "utf-8"
 
 del(os)
 del(locale)
-

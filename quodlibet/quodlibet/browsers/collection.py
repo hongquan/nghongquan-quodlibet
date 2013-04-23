@@ -30,8 +30,10 @@ from quodlibet.util.thumbnails import scale
 
 
 EMPTY = _("Songs not in an album")
-ALBUM_PATTERN = r"""\<b\><album|\<i\><album>\</i\>|%s>\</b\><date| \<small\>(<date>)\</small\>>
+ALBUM_PATTERN = r"""
+\<b\><album|\<i\><album>\</i\>|%s>\</b\><date| \<small\>(<date>)\</small\>>
 \<small\><~discs|<~discs> - ><~tracks> - <~long-length>\</small\>""" % EMPTY
+ALBUM_PATTERN = ALBUM_PATTERN.lstrip()
 
 UNKNOWN_PATTERN = "<b><i>%s</i></b>" % _("Unknown %s")
 MULTI_PATTERN = "<b><i>%s</i></b>" % _("Multiple %s Values")
@@ -65,11 +67,11 @@ def save_headers(headers):
 class PatternEditor(gtk.HBox):
 
     PRESETS = [
-            [("~people", False)],
-            [("~year", False)],
-            [("genre", False)],
-            [("genre", False), ("artist", False)],
-        ]
+        [("~people", False)],
+        [("~year", False)],
+        [("genre", False)],
+        [("genre", False), ("artist", False)],
+    ]
 
     COMPLETION = ["genre", "grouping", "~people", "artist", "album", "~year"]
 
@@ -569,8 +571,8 @@ class CollectionBrowser(Browser, gtk.VBox, util.InstanceTracker):
             a1, a2 = t1, t2
             return (cmp(a1.peoplesort and a1.peoplesort[0],
                         a2.peoplesort and a2.peoplesort[0]) or
-                        cmp(a1.date or "ZZZZ", a2.date or "ZZZZ") or
-                        cmp((a1.sort, a1.key), (a2.sort, a2.key)))
+                    cmp(a1.date or "ZZZZ", a2.date or "ZZZZ") or
+                    cmp((a1.sort, a1.key), (a2.sort, a2.key)))
 
         model_sort.set_sort_func(0, sort)
         model_sort.set_sort_column_id(0, gtk.SORT_ASCENDING)
@@ -613,7 +615,7 @@ class CollectionBrowser(Browser, gtk.VBox, util.InstanceTracker):
         prefs.connect('clicked', Preferences)
 
         search = SearchBarBox(button=False, completion=AlbumTagCompletion(),
-                              accel_group=self.accelerators)
+                              accel_group=self.accelerators, compact=True)
 
         search.connect('query-changed', self.__update_filter)
 
@@ -628,8 +630,8 @@ class CollectionBrowser(Browser, gtk.VBox, util.InstanceTracker):
         self.pack_start(sw, expand=True)
 
         view.get_selection().set_mode(gtk.SELECTION_MULTIPLE)
-        self.__sig = view.get_selection().connect('changed',
-            self.__selection_changed)
+        self.__sig = view.get_selection().connect(
+            'changed', self.__selection_changed)
         view.connect('row-activated', self.__play, main)
         view.connect_object('popup-menu', self.__popup, view, library)
 

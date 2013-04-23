@@ -6,8 +6,10 @@
 
 import gtk
 
+from quodlibet import app
 from quodlibet import qltk
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
+
 
 class Bookmarks(SongsMenuPlugin):
     PLUGIN_ID = "Go to Bookmark..."
@@ -28,15 +30,12 @@ class Bookmarks(SongsMenuPlugin):
             self.song = song
 
         def seek(self, time):
-            from player import playlist as player
-            if player.go_to(self.song._song, explicit=True):
-                player.seek(time)
+            if app.player.go_to(self.song._song, explicit=True):
+                app.player.seek(time)
 
         get_position = lambda *x: 0
 
     def __map(self, menu, songs):
-        from quodlibet.library import library
-
         for song in songs:
             marks = song.bookmarks
             if marks:
@@ -53,7 +52,8 @@ class Bookmarks(SongsMenuPlugin):
                 song_menu.append(gtk.SeparatorMenuItem())
                 i = qltk.MenuItem(_("_Edit Bookmarks..."), gtk.STOCK_EDIT)
                 i.connect_object('activate',
-                    qltk.bookmarks.EditBookmarks, None, library, fake_player)
+                    qltk.bookmarks.EditBookmarks, None, app.library,
+                    fake_player)
                 song_menu.append(i)
 
         if menu.get_active() is None:
@@ -66,4 +66,5 @@ class Bookmarks(SongsMenuPlugin):
     def __unmap(self, menu):
         map(self.__menu.remove, self.__menu.get_children())
 
-    def plugin_songs(self, songs): pass
+    def plugin_songs(self, songs):
+        pass

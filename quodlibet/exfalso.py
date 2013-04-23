@@ -7,7 +7,7 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation.
 
-0<>0 # Python 3.x not supported! Use 2.6+ instead.
+0 <> 0 # Python 3.x not supported! Use 2.6+ instead.
 
 import os
 import sys
@@ -35,7 +35,6 @@ def main():
     app.library = quodlibet.init(icon="exfalso",
                                  name="Ex Falso",
                                  title=const.PROCESS_TITLE_EF)
-    app.librarian = app.library.librarian
     app.player = quodlibet.init_backend("nullbe", app.librarian)
     pm = quodlibet.init_plugins()
     pm.rescan()

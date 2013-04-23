@@ -23,7 +23,7 @@ from quodlibet import config
 from quodlibet import const
 
 from quodlibet.util import fver, sanitize_tags
-from quodlibet.player import error as PlayerError
+from quodlibet.player import PlayerError
 from quodlibet.player._base import BasePlayer
 from quodlibet.player._gstutils import *
 from quodlibet.qltk.msg import ErrorMessage
@@ -67,6 +67,7 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
                 "playback, such as 'alsasink device=default'. "
                 "Leave blank for default pipeline."))
         e.set_text(config.get('player', 'gst_pipeline'))
+
         def changed(entry):
             config.set('player', 'gst_pipeline', entry.get_text())
         e.connect('changed', changed)
@@ -168,7 +169,8 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
                 -> audioconvert -> user defined elements
                 -> gconf/autoaudiosink ]
         """
-        if self.bin: return True
+        if self.bin:
+            return True
 
         pipeline = config.get("player", "gst_pipeline")
         pipeline, self.name = GStreamerSink(pipeline)
@@ -221,7 +223,7 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
 
         # Test to ensure output pipeline can preroll
         bufbin.set_state(gst.STATE_READY)
-        result, state, pending = bufbin.get_state(timeout=gst.SECOND/2)
+        result, state, pending = bufbin.get_state(timeout=gst.SECOND / 2)
         if result == gst.STATE_CHANGE_FAILURE:
             bufbin.set_state(gst.STATE_NULL)
             self.__destroy_pipeline()
@@ -230,6 +232,31 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
         # Set the device
         sink = pipeline[-1]
         set_sink_device(sink)
+
+        # Workaround for https://bugzilla.gnome.org/show_bug.cgi?id=680252
+        # http://code.google.com/p/quodlibet/issues/detail?id=994
+        # Remove after this is ported to gst1.0!
+
+        # get the real sink
+        real_sink = sink
+        if isinstance(sink, gst.Bin):
+            real_sink = list(sink.recurse())[-1]
+
+        # if a discont happens resync without waiting, this happens
+        # on ogg -> flac transitions.
+        try:
+            real_sink.set_property("discont-wait", 0)
+        except TypeError:
+            pass
+
+        # The above removes jitter detection, so increase the drift-tolerance
+        # so we don't skip. We only do audio and don't care about sync.
+        # This value isn't maxed since the gstreamer code doesn't care about
+        # overflows.
+        try:
+            real_sink.set_property("drift-tolerance", 10 ** 7)
+        except TypeError:
+            pass
 
         # Make the sink of the first element the sink of the bin
         gpad = gst.GhostPad('sink', pipeline[0].get_pad('sink'))
@@ -287,7 +314,7 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
 
         if self.bin:
             self.bin.set_state(gst.STATE_NULL)
-            self.bin.get_state(timeout=gst.SECOND/2)
+            self.bin.get_state(timeout=gst.SECOND / 2)
             self.bin = None
 
         if self._task:
@@ -403,8 +430,10 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
         or 0 if no song is playing."""
         p = self._last_position
         if self.song and self.bin:
-            try: p = self.bin.query_position(gst.FORMAT_TIME)[0]
-            except gst.QueryError: pass
+            try:
+                p = self.bin.query_position(gst.FORMAT_TIME)[0]
+            except gst.QueryError:
+                pass
             else:
                 p //= gst.MSECOND
                 # During stream seeking querying the position fails.
@@ -413,11 +442,12 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
         return p
 
     def __buffering(self, percent):
-        def stop_buf(*args): self.paused = True
+        def stop_buf(*args):
+            self.paused = True
 
         if percent < 100:
             if self._task:
-                self._task.update(percent/100.0)
+                self._task.update(percent / 100.0)
             else:
                 self._task = Task(_("Stream"), _("Buffering"), stop=stop_buf)
         elif self._task:
@@ -460,8 +490,10 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
                     self.bin.set_state(gst.STATE_PAUSED)
                 else:
                     # seekable streams (seem to) have a duration >= 0
-                    try: d = self.bin.query_duration(gst.FORMAT_TIME)[0]
-                    except gst.QueryError: d = -1
+                    try:
+                        d = self.bin.query_duration(gst.FORMAT_TIME)[0]
+                    except gst.QueryError:
+                        d = -1
 
                     if d >= 0:
                         self.bin.set_state(gst.STATE_PAUSED)
@@ -488,7 +520,8 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
 
         self.emit((paused and 'paused') or 'unpaused')
 
-    def _get_paused(self): return self._paused
+    def _get_paused(self):
+        return self._paused
     paused = property(_get_paused, _set_paused)
 
     def _error(self, message):
@@ -506,10 +539,10 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
         if self.__init_pipeline():
             # ensure any pending state changes have completed and we have
             # at least paused state, so we can seek
-            state = self.bin.get_state(timeout=gst.SECOND/2)[1]
+            state = self.bin.get_state(timeout=gst.SECOND / 2)[1]
             if state < gst.STATE_PAUSED:
                 self.bin.set_state(gst.STATE_PAUSED)
-                self.bin.get_state(timeout=gst.SECOND/2)
+                self.bin.get_state(timeout=gst.SECOND / 2)
 
             pos = max(0, int(pos))
             gst_time = pos * gst.MSECOND
@@ -635,8 +668,11 @@ class GStreamerPlayer(BasePlayer, GStreamerPluginHandler):
             for band, val in enumerate(self._eq_values):
                 self._eq_element.set_property('band%d' % band, val)
 
-def can_play_uri(uri):
-    return gst.element_make_from_uri(gst.URI_SRC, uri, '') is not None
+    def can_play_uri(self, uri):
+        if not gst.uri_is_valid(uri):
+            return False
+        return gst.element_make_from_uri(gst.URI_SRC, uri, '') is not None
+
 
 def init(librarian):
     # Enable error messages by default

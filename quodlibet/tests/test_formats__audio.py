@@ -17,7 +17,8 @@ bar_1_2 = AudioFile({
     "title": "Perhaps another",
     "discnumber": "1", "tracknumber": "2/3",
     "artist": "Lali-ho!", "album": "Bar",
-    "date": "2004-12-12", "originaldate": "2005-01-01"})
+    "date": "2004-12-12", "originaldate": "2005-01-01",
+    "~#filesize": 1024**2})
 bar_2_1 = AudioFile({
     "~filename": "does not/exist",
     "title": "more songs",
@@ -81,6 +82,10 @@ class TAudioFile(TestCase):
         self.failUnlessEqual(bar_1_2("~year"), "2004")
         self.failUnlessEqual(bar_1_2("~#year"), 2004)
         self.failUnlessEqual(bar_1_1("~#year", 1999), 1999)
+
+    def test_filesize(self):
+        self.failUnlessEqual(bar_1_2("~filesize"), "1.00 MB")
+        self.failUnlessEqual(bar_1_2("~#filesize"), 1024**2)
 
     def test_originalyear(self):
         self.failUnlessEqual(bar_1_2("~originalyear"), "2005")
@@ -386,13 +391,12 @@ class TAudioFile(TestCase):
     def test_invalid_fs_encoding(self):
         # issue 798
         a = AudioFile()
-        a.sanitize("/\xf6\xe4\xfc/\xf6\xe4\xfc.ogg") # latin 1 encoded
+        a["~filename"] = "/\xf6\xe4\xfc/\xf6\xe4\xfc.ogg" # latin 1 encoded
         a.sort_by_func("~filename")(a)
         a.sort_by_func("~basename")(a)
-        a.sort_by_func("~dirname")(a)
 
         # windows
-        a.sanitize("/\xf6\xe4\xfc/\xf6\xe4\xfc.ogg".decode("latin-1"))
+        a["~filename"] = "/\xf6\xe4\xfc/\xf6\xe4\xfc.ogg".decode("latin-1")
         a.sort_by_func("~filename")(a)
         a.sort_by_func("~basename")(a)
         a.sort_by_func("~dirname")(a)

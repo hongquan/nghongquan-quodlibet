@@ -15,6 +15,7 @@ from quodlibet import util, qltk
 from quodlibet.plugins.songsmenu import SongsMenuPlugin
 from quodlibet.const import HOME as lastfolder
 
+
 if hasattr(os.path, 'relpath'):
     relpath = os.path.relpath
 else:
@@ -31,10 +32,11 @@ else:
         # Work out how much of the filepath is shared by start and path.
         i = len(os.path.commonprefix([start_list, path_list]))
 
-        rel_list = [os.path.pardir] * (len(start_list)-i) + path_list[i:]
+        rel_list = [os.path.pardir] * (len(start_list) - i) + path_list[i:]
         if not rel_list:
             return os.path.curdir
         return os.path.join(*rel_list)
+
 
 class PlaylistExport(SongsMenuPlugin):
     PLUGIN_ID = 'Playlist Export'
@@ -66,7 +68,7 @@ class PlaylistExport(SongsMenuPlugin):
 
         dialog.set_current_folder(lastfolder)
 
-        diag_cont = dialog.child
+        diag_cont = dialog.get_child()
         hbox_path = gtk.HBox()
         combo_path = gtk.combo_box_new_text()
         hbox_path.pack_end(combo_path, False, False, padding=6)
@@ -111,7 +113,7 @@ class PlaylistExport(SongsMenuPlugin):
         files = []
         for song in songs:
             f = {}
-            if song.has_key("~uri"):
+            if "~uri" in song:
                 f['path'] = song('~filename')
                 f['title'] = song("title")
                 f['length'] = -1
@@ -121,7 +123,7 @@ class PlaylistExport(SongsMenuPlugin):
                     path = relpath(path, dir_path)
                 f['path'] = path
                 f['title'] = "%s - %s" % (
-                    song('~people').replace("\n",", "),
+                    song('~people').replace("\n", ", "),
                     song('~title~version'))
                 f['length'] = song('~#length')
             files.append(f)

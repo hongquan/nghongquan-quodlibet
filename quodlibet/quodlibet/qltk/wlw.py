@@ -13,6 +13,7 @@ import pango
 from quodlibet.qltk import get_top_parent
 from quodlibet import util
 
+
 class WaitLoadBase(object):
     """Abstract class providing a label, a progressbar, pause/stop buttons,
     and the stepping logic."""
@@ -99,6 +100,7 @@ class WaitLoadBase(object):
             gtk.main_iteration()
         return self.quit
 
+
 class WaitLoadWindow(WaitLoadBase, gtk.Window):
     """A window with a progress bar and some nice updating text,
     as well as pause/stop buttons.
@@ -128,7 +130,7 @@ class WaitLoadWindow(WaitLoadBase, gtk.Window):
         self.set_resizable(False)
         self.set_focus_on_map(False)
         self.add(gtk.Frame())
-        self.child.set_shadow_type(gtk.SHADOW_OUT)
+        self.get_child().set_shadow_type(gtk.SHADOW_OUT)
         vbox = gtk.VBox(spacing=12)
         vbox.set_border_width(12)
         self._label.set_size_request(170, -1)
@@ -145,10 +147,11 @@ class WaitLoadWindow(WaitLoadBase, gtk.Window):
             hbox.pack_start(self._pause_button)
             vbox.pack_start(hbox)
 
-        self.child.add(vbox)
+        self.get_child().add(vbox)
 
         self.set_position(gtk.WIN_POS_CENTER_ON_PARENT)
-        while gtk.events_pending(): gtk.main_iteration()
+        while gtk.events_pending():
+            gtk.main_iteration()
         self.show_all()
 
     def __recenter(self, parent, event):
@@ -162,6 +165,7 @@ class WaitLoadWindow(WaitLoadBase, gtk.Window):
             parent.window.set_cursor(None)
         parent.disconnect(sig)
 
+
 class WritingWindow(WaitLoadWindow):
     """A WaitLoadWindow that defaults to text suitable for saving files."""
 
@@ -169,10 +173,12 @@ class WritingWindow(WaitLoadWindow):
         super(WritingWindow, self).__init__(
             parent, count,
             (_("Saving the songs you changed.") + "\n\n" +
-             _("%(current)d/%(total)d songs saved\n(%(remaining)s remaining)")))
+             _("%(current)d/%(total)d songs saved\n(%(remaining)s remaining)")
+            ))
 
     def step(self):
         return super(WritingWindow, self).step()
+
 
 class WaitLoadBar(WaitLoadBase, gtk.HBox):
     def __init__(self):
@@ -181,10 +187,10 @@ class WaitLoadBar(WaitLoadBase, gtk.HBox):
         self._label.set_alignment(0.0, 0.5)
         self._label.set_ellipsize(pango.ELLIPSIZE_END)
 
-        self._cancel_button.remove(self._cancel_button.child)
+        self._cancel_button.remove(self._cancel_button.get_child())
         self._cancel_button.add(gtk.image_new_from_stock(
             gtk.STOCK_STOP, gtk.ICON_SIZE_MENU))
-        self._pause_button.remove(self._pause_button.child)
+        self._pause_button.remove(self._pause_button.get_child())
         self._pause_button.add(gtk.image_new_from_stock(
             gtk.STOCK_MEDIA_PAUSE, gtk.ICON_SIZE_MENU))
 

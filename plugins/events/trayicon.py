@@ -38,9 +38,8 @@ class Preferences(gtk.VBox):
                             "Shift and scroll wheel changes song"))
         combo.append_text(_("Scroll wheel changes song\n"
                             "Shift and scroll wheel adjusts volume"))
-        try: combo.set_active(int(
-            config.getboolean("plugins", "icon_modifier_swap")))
-        except config.error: combo.set_active(0)
+        combo.set_active(int(
+                config.getboolean("plugins", "icon_modifier_swap", False)))
         combo.connect('changed', self.__changed_combo)
 
         self.pack_start(qltk.Frame(_("Scroll _Wheel"), child=combo))
@@ -52,12 +51,12 @@ class Preferences(gtk.VBox):
 
         cbs = []
         for i, tag in enumerate([
-            "genre", "artist", "album", "discnumber", "part", "tracknumber",
-            "title", "version"]):
+                "genre", "artist", "album", "discnumber", "part",
+                "tracknumber", "title", "version"]):
             cb = gtk.CheckButton(util.tag(tag))
             cb.tag = tag
             cbs.append(cb)
-            table.attach(cb, i%3, i%3+1, i//3, i//3+1)
+            table.attach(cb, i % 3, i % 3 + 1, i // 3, i // 3 + 1)
         box.pack_start(table)
 
         entry = gtk.Entry()
@@ -91,7 +90,7 @@ class Preferences(gtk.VBox):
             "plugins", "icon_modifier_swap", str(bool(combo.get_active())))
 
     def __changed_cb(self, cb, cbs, entry):
-        text = "<%s>" % "~".join([cb.tag for cb in cbs if cb.get_active()])
+        text = "<%s>" % "~".join([c.tag for c in cbs if c.get_active()])
         entry.set_text(text)
 
     def __changed_entry(self, entry, cbs, label):
@@ -110,10 +109,13 @@ class Preferences(gtk.VBox):
                     cb.set_inconsistent(False)
                     cb.set_active(cb.tag in parts)
         else:
-            for cb in cbs: cb.set_inconsistent(True)
+            for cb in cbs:
+                cb.set_inconsistent(True)
 
-        if app.player.info is None: text = _("Not playing")
-        else: text = Pattern(entry.get_text()) % app.player.info
+        if app.player.info is None:
+            text = _("Not playing")
+        else:
+            text = Pattern(entry.get_text()) % app.player.info
         label.set_text(text)
         label.get_parent().set_tooltip_text(text)
         config.set("plugins", "icon_tooltip", entry.get_text())
@@ -158,7 +160,8 @@ class TrayIcon(EventPlugin):
         self.__icon.connect('button-press-event', self.__button_middle)
 
         self.__w_sig_map = app.window.connect('map', self.__window_map)
-        self.__w_sig_del = app.window.connect('delete-event', self.__window_delete)
+        self.__w_sig_del = app.window.connect('delete-event',
+                                              self.__window_delete)
 
         self.__stop_after = StopAfterMenu(app.player)
 
@@ -172,8 +175,10 @@ class TrayIcon(EventPlugin):
         app.window.disconnect(self.__w_sig_map)
         app.window.disconnect(self.__w_sig_del)
         self.__icon.set_visible(False)
-        try: self.__icon.destroy()
-        except AttributeError: pass
+        try:
+            self.__icon.destroy()
+        except AttributeError:
+            pass
         self.__icon = None
         self.__show_window()
 
@@ -190,12 +195,14 @@ class TrayIcon(EventPlugin):
         theme = gtk.icon_theme_get_default()
 
         # Get the suggested icon
-        info =  theme.choose_icon(names, size, gtk.ICON_LOOKUP_USE_BUILTIN)
-        if not info: return
+        info = theme.choose_icon(names, size, gtk.ICON_LOOKUP_USE_BUILTIN)
+        if not info:
+            return
 
         try:
             pixbuf = info.load_icon()
-        except gobject.GError: pass
+        except gobject.GError:
+            pass
         else:
             # In case it is too big, rescale
             if pixbuf.get_height() - size > diff:
@@ -275,10 +282,7 @@ class TrayIcon(EventPlugin):
         return self.__hide_window()
 
     def __window_map(self, win):
-        try:
-            visible = config.getboolean("plugins", "icon_window_visible")
-        except config.error:
-            return
+        visible = config.getboolean("plugins", "icon_window_visible", False)
 
         config.set("plugins", "icon_window_visible", "true")
 
@@ -296,7 +300,8 @@ class TrayIcon(EventPlugin):
         app.present()
 
     def __button_left(self, icon):
-        if self.__destroy_win32_menu(): return
+        if self.__destroy_win32_menu():
+            return
         if app.window.get_property('visible'):
             self.__hide_window()
         else:
@@ -304,7 +309,8 @@ class TrayIcon(EventPlugin):
 
     def __button_middle(self, widget, event):
         if event.type == gtk.gdk.BUTTON_PRESS and event.button == 2:
-            if self.__destroy_win32_menu(): return
+            if self.__destroy_win32_menu():
+                return
             self.__play_pause()
 
     def __play_pause(self, *args):
@@ -317,7 +323,7 @@ class TrayIcon(EventPlugin):
     def __scroll(self, widget, event):
         try:
             event.state ^= config.getboolean("plugins", "icon_modifier_swap")
-        except config.error:
+        except config.Error:
             pass
 
         if event.direction in [SCROLL_LEFT, SCROLL_RIGHT]:
@@ -336,12 +342,13 @@ class TrayIcon(EventPlugin):
                 player.volume -= 0.05
 
     def plugin_on_song_started(self, song):
-        if not self.__icon: return
+        if not self.__icon:
+            return
 
         if song:
             try:
                 pattern = Pattern(config.get("plugins", "icon_tooltip"))
-            except (ValueError, config.error):
+            except (ValueError, config.Error):
                 pattern = self.__pattern
 
             tooltip = pattern % song
@@ -358,7 +365,8 @@ class TrayIcon(EventPlugin):
             return True
 
     def __button_right(self, icon, button, time):
-        if self.__destroy_win32_menu(): return
+        if self.__destroy_win32_menu():
+            return
         self.__menu = menu = gtk.Menu()
 
         player = app.player
@@ -379,7 +387,6 @@ class TrayIcon(EventPlugin):
         repeat.set_active(window.repeat.get_active())
         repeat.connect('toggled',
             lambda s: window.repeat.set_active(s.get_active()))
-
 
         def set_safter(widget, stop_after):
             stop_after.active = widget.get_active()
@@ -427,9 +434,11 @@ class TrayIcon(EventPlugin):
 
         rating = gtk.MenuItem(_("_Rating"))
         rating_sub = gtk.Menu()
+
         def set_rating(value):
             song = player.song
-            if song is None: return
+            if song is None:
+                return
             else:
                 song["~#rating"] = value
                 app.librarian.changed([song])

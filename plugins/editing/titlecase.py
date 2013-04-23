@@ -6,7 +6,7 @@
 
 import gtk
 
-from quodlibet import config, util
+from quodlibet import util
 from quodlibet.plugins.editing import EditTagsPlugin
 from quodlibet.plugins import PluginConfigMixin
 
@@ -24,12 +24,15 @@ ENGLISH_INCORRECTLY_CAPITALISED_WORDS = \
 # Allow basic sentence-like concepts eg "Artist: The Greatest Hits"
 ENGLISH_SENTENCE_ENDS = [".", ":", "-"]
 
+
 def previous_real_word(words, i):
     """Returns the first word from words before position i that is non-null"""
-    while (i > 0):
+    while i > 0:
         i -= 1
-        if words[i] != "": break
+        if words[i] != "":
+            break
     return words[i]
+
 
 def humanise(text):
     """Returns a more natural (English) title-casing of text
@@ -39,9 +42,9 @@ def humanise(text):
         word = words[i]
         if word in ENGLISH_INCORRECTLY_CAPITALISED_WORDS:
             prev = previous_real_word(words, i)
-            if (not prev[-1] in ENGLISH_SENTENCE_ENDS
-            # Add an exception for would-be ellipses...
-            or prev[-3:] == '...'):
+            if (prev and (not prev[-1] in ENGLISH_SENTENCE_ENDS
+                    # Add an exception for would-be ellipses...
+                    or prev[-3:] == '...')):
                 words[i] = word.lower()
     return u" ".join(words)
 
@@ -56,7 +59,7 @@ class TitleCase(EditTagsPlugin, PluginConfigMixin):
 
     # Issue 753: Allow all caps (as before).
     # Set to False means you get Run Dmc, Ac/Dc, Cd 1/2 etc
-    allow_all_caps = True;
+    allow_all_caps = True
 
     def process_tag(self, value):
         if not self.allow_all_caps:
@@ -92,4 +95,3 @@ class TitleCase(EditTagsPlugin, PluginConfigMixin):
 
     def activated(self, tag, value):
         return [(tag, self.process_tag(value))]
-

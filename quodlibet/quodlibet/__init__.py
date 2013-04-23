@@ -17,6 +17,7 @@ import gettext
 import locale
 import os
 import re
+import sys
 
 import quodlibet.const
 import quodlibet.util
@@ -41,8 +42,11 @@ class Application(object):
 
     window = None
     library = None
-    librarian = None
     player = None
+
+    @property
+    def librarian(self):
+        return self.library.librarian
 
     def quit(self):
         import gobject
@@ -88,7 +92,8 @@ def _gtk_init(icon=None):
 
     pygtk_ver = Version(gtk.pygtk_version)
     if pygtk_ver < MinVersions.PYGTK:
-        print_w("PyGTK %s required. %s found."% (MinVersions.PYGTK, pygtk_ver))
+        print_w("PyGTK %s required. %s found." %
+                (MinVersions.PYGTK, pygtk_ver))
 
     def warn_threads(func):
         def w():
@@ -105,20 +110,11 @@ def _gtk_init(icon=None):
     theme.append_search_path(quodlibet.const.IMAGEDIR)
 
     if icon:
-        pixbufs = []
-        for size in [64, 48, 32, 16]:
-            try: pixbufs.append(theme.load_icon(icon, size, 0))
-            except gobject.GError: pass
-        gtk.window_set_default_icon_list(*pixbufs)
+        gtk.window_set_default_icon_name(icon)
 
     def website_wrap(activator, link):
         if not quodlibet.util.website(link):
-            from quodlibet.qltk.msg import ErrorMessage
-            ErrorMessage(
-                main, _("Unable to start web browser"),
-                _("A web browser could not be found. Please set "
-                  "your $BROWSER variable, or make sure "
-                  "/usr/bin/sensible-browser exists.")).run()
+            print_w("opening %r failed" % link)
 
     # only works with a running main loop
     gobject.idle_add(gtk.about_dialog_set_url_hook, website_wrap)
@@ -140,8 +136,10 @@ def _dbus_init():
 
 
 def _gettext_init():
-    try: locale.setlocale(locale.LC_ALL, '')
-    except locale.Error: pass
+    try:
+        locale.setlocale(locale.LC_ALL, '')
+    except locale.Error:
+        pass
 
     unexpand = quodlibet.util.unexpand
 
@@ -167,7 +165,11 @@ def _gettext_init():
     except IOError:
         print_d("No translation found in %r" % unexpand(localedir))
         t = GlibTranslations()
+    else:
+        print_d("Translations loaded: %r" % unexpand(t.path))
+
     t.install(unicode=True)
+
 
 def set_process_title(title):
     """Sets process name as visible in ps or top. Requires ctypes libc
@@ -184,6 +186,7 @@ def set_process_title(title):
     except:
         print_d("Couldn't find module libc.so.6 (ctypes). "
                 "Not setting process title.")
+
 
 def _python_init():
 
@@ -247,13 +250,12 @@ def init(library=None, icon=None, title=None, name=None):
     import quodlibet.library
     library = quodlibet.library.init(library)
 
-    print_d("Initializing debugging extensions")
-    import quodlibet.debug
-    quodlibet.debug.init()
+    _init_debug()
 
     print_d("Finished initialization.")
 
     return library
+
 
 def init_plugins(no_plugins=False):
     print_d("Starting plugin manager")
@@ -277,12 +279,14 @@ def init_plugins(no_plugins=False):
 
     return pm
 
+
 def init_backend(backend, librarian):
     import quodlibet.player
     print_d("Initializing audio backend (%s)" % backend)
     backend = quodlibet.player.init(backend)
-    device = quodlibet.player.init_device(librarian)
+    device = backend.init(librarian)
     return device
+
 
 def enable_periodic_save(save_library):
     import quodlibet.library
@@ -307,6 +311,19 @@ def enable_periodic_save(save_library):
             yield
 
     copool.add(periodic_library_save, timeout=timeout)
+
+
+def _init_debug():
+    import gobject
+    from quodlibet.qltk.debugwindow import ExceptionDialog
+
+    print_d("Initializing debugging extensions")
+
+    def _override_exceptions():
+        print_d("Enabling custom exception handler.")
+        sys.excepthook = ExceptionDialog.excepthook
+    gobject.idle_add(_override_exceptions)
+
 
 def _init_signal():
     """Catches certain signals and quits the application once the

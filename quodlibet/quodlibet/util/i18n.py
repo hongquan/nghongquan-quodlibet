@@ -8,6 +8,7 @@ import __builtin__
 import gettext
 import os
 
+
 class GlibTranslations(gettext.GNUTranslations):
     """Provide a glib-like translation API for Python.
 
@@ -20,28 +21,37 @@ class GlibTranslations(gettext.GNUTranslations):
     (though it won't be able to translate anything, of course).
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, fp=None):
+        self.path = (fp and fp.name) or ""
         self._catalog = {}
         self.plural = lambda n: n != 1
-        gettext.GNUTranslations.__init__(self, *args, **kwargs)
+        gettext.GNUTranslations.__init__(self, fp)
 
     def qgettext(self, msgid):
         msgstr = self.gettext(msgid)
         if msgstr == msgid:
-            try: return msgstr.split("|", 1)[1]
-            except IndexError: return msgstr
+            try:
+                return msgstr.split("|", 1)[1]
+            except IndexError:
+                return msgstr
         else:
             return msgstr
 
     def uqgettext(self, msgid):
         msgstr = self.ugettext(msgid)
         if msgstr == msgid:
-            try: return msgstr.split(u"|", 1)[1]
-            except IndexError: return msgstr
+            try:
+                return msgstr.split(u"|", 1)[1]
+            except IndexError:
+                return msgstr
         else:
             return msgstr
 
     def install(self, unicode=False):
+        # set by tests
+        if "QUODLIBET_NO_TRANS" in os.environ:
+            return
+
         if unicode:
             _ = self.ugettext
             _Q = self.uqgettext
@@ -56,6 +66,7 @@ class GlibTranslations(gettext.GNUTranslations):
         test_key = "QUODLIBET_TEST_TRANS"
         if test_key in os.environ:
             text = os.environ[test_key]
+
             def wrap(f):
                 def g(*args):
                     return text + f(*args) + text

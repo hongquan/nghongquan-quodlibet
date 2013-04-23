@@ -51,6 +51,7 @@ class PluginImportException(Exception):
             return False
         return True
 
+
 def migrate_old_config():
     active = []
     old_keys = ["songsmenuplugins", "eventplugins", "editingplugins",
@@ -59,7 +60,7 @@ def migrate_old_config():
         key = "active_" + key
         try:
             active.extend(config.get("plugins", key).splitlines())
-        except config.error:
+        except config.Error:
             pass
         else:
             config._config.remove_option("plugins", key)
@@ -75,7 +76,8 @@ def list_plugins(module):
     If '__all__' is defined, only plugins in '__all__' will be loaded.
     """
 
-    try: objs = [getattr(module, attr) for attr in module.__all__]
+    try:
+        objs = [getattr(module, attr) for attr in module.__all__]
     except AttributeError:
         objs = [getattr(module, attr) for attr in vars(module)
                 if not attr.startswith("_")]
@@ -125,7 +127,7 @@ class PluginManager(object):
     CONFIG_SECTION = "plugins"
     CONFIG_OPTION = "active_plugins"
 
-    instance = None # default instance
+    instance = None  # default instance
 
     def __init__(self, folders=None):
         """folders is a list of paths that will be scanned for plugins.
@@ -188,7 +190,7 @@ class PluginManager(object):
         """Returns a list of plugin classes or instances"""
 
         items = self.__handlers.items()
-        return [self.get_instance(p) or p for (p,h) in items if h]
+        return [self.get_instance(p) or p for (p, h) in items if h]
 
     def get_instance(self, plugin):
         """"Returns a possibly shared instance of the plugin class"""
@@ -348,14 +350,14 @@ class PluginConfigMixin(object):
         """Saves a config string value for this plugin"""
         try:
             config.set(PM.CONFIG_SECTION, cls._config_key(name), value)
-        except config.error:
+        except config.Error:
             print_d("Couldn't set config item '%s' to %r" % (name, value))
 
     @classmethod
     def config_get_bool(cls, name, default=False):
         """Gets a config boolean for this plugin"""
         return config.getboolean(PM.CONFIG_SECTION, cls._config_key(name),
-            default)
+                                 default)
 
     def config_entry_changed(self, entry, key):
         """React to a change in an gtk.Entry (by saving it to config)"""
@@ -370,7 +372,7 @@ class PluginConfigMixin(object):
         option = cls._config_key(name)
         try:
             config.getboolean(PM.CONFIG_SECTION, option)
-        except config.error:
+        except config.Error:
             cls.config_set(name, default)
         return ConfigCheckButton(label, PM.CONFIG_SECTION,
-            option, populate=True)
+                                 option, populate=True)

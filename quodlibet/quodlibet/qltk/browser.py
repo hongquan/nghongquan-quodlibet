@@ -43,13 +43,13 @@ class LibraryBrowser(Window, PersistentWindowMixin):
             self.add_accel_group(browser.accelerators)
 
         self.__container = browser.pack(sw)
-        self.child.pack_start(self.__container)
+        self.get_child().pack_start(self.__container)
 
         self.__statusbar = gtk.Label()
         self.__statusbar.set_text(_("No time information"))
         self.__statusbar.set_alignment(1.0, 0.5)
         self.__statusbar.set_ellipsize(pango.ELLIPSIZE_START)
-        self.child.pack_end(self.__statusbar, expand=False)
+        self.get_child().pack_end(self.__statusbar, expand=False)
 
         browser.connect('songs-selected', self.__browser_cb)
         browser.finalize(False)
@@ -61,9 +61,9 @@ class LibraryBrowser(Window, PersistentWindowMixin):
             view.connect('columns-changed', self.__cols_changed, browser)
             self.__cols_changed(view, browser)
         sw.show_all()
-        for c in self.child.get_children():
+        for c in self.get_child().get_children():
             c.show()
-        self.child.show()
+        self.get_child().show()
         self.show()
         self.__set_pane_size()
 
@@ -85,17 +85,20 @@ class LibraryBrowser(Window, PersistentWindowMixin):
     def __browser_cb(self, browser, songs, sorted):
         if browser.background:
             bg = background_filter()
-            if bg: songs = filter(bg, songs)
+            if bg:
+                songs = filter(bg, songs)
         self.__set_time(songs=songs)
         self.songlist.set_songs(songs, sorted)
 
     def __enqueue(self, view, path, column):
         from quodlibet import app
         app.window.playlist.enqueue([view.get_model()[path][0]])
-        if app.player.song is None: app.player.next()
+        if app.player.song is None:
+            app.player.next()
 
     def __drag_data_recv(self, view, *args):
-        if callable(self.browser.reordered): self.browser.reordered(view)
+        if callable(self.browser.reordered):
+            self.browser.reordered(view)
         view.set_sort_by(None, refresh=False)
 
     def __cols_changed(self, view, browser):
@@ -105,7 +108,8 @@ class LibraryBrowser(Window, PersistentWindowMixin):
                 if t in browser.headers:
                     header.set_visible(True)
                     break
-            else: header.set_visible(False)
+            else:
+                header.set_visible(False)
 
     def __menu(self, view, library):
         path, col = view.get_cursor()

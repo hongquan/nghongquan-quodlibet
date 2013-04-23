@@ -49,6 +49,7 @@ STATIONS_ALL = os.path.join(const.USERDIR, "stations_all")
 # Migration path for pickle
 sys.modules["browsers.iradio"] = sys.modules[__name__]
 
+
 class IRFile(RemoteFile):
     multisong = True
     can_add = False
@@ -72,13 +73,13 @@ class IRFile(RemoteFile):
 
         if key == "~format" and "audio-codec" in self:
             return "%s (%s)" % (self.format,
-                base_call("audio-codec", *args, **kwargs))
+                                base_call("audio-codec", *args, **kwargs))
         return base_call(key, *args, **kwargs)
 
     def get(self, key, *args):
         base_call = super(IRFile, self).get
         if key in ("artist", TAG_TO_SORT["artist"]) and \
-            not base_call(key, *args) and "website" in self:
+                not base_call(key, *args) and "website" in self:
             return base_call("website", *args)
         return base_call(key, *args)
 
@@ -96,15 +97,20 @@ def ParsePLS(file):
     data = {}
 
     lines = file.readlines()
-    if not lines or "[playlist]" not in lines.pop(0): return []
+    if not lines or "[playlist]" not in lines.pop(0):
+        return []
 
     for line in lines:
-        try: head, val = line.strip().split("=", 1)
-        except (TypeError, ValueError): continue
+        try:
+            head, val = line.strip().split("=", 1)
+        except (TypeError, ValueError):
+            continue
         else:
             head = head.lower()
-            if head.startswith("length") and val == "-1": continue
-            else: data[head] = val.decode('utf-8', 'replace')
+            if head.startswith("length") and val == "-1":
+                continue
+            else:
+                data[head] = val.decode('utf-8', 'replace')
 
     count = 1
     files = []
@@ -117,12 +123,17 @@ def ParsePLS(file):
             else:
                 irf = IRFile(filename)
                 for key in ["title", "genre", "artist"]:
-                    try: irf[key] = data["%s%d" % (key, count)]
-                    except KeyError: pass
-                try: irf["~#length"] = int(data["length%d" % count])
-                except (KeyError, TypeError, ValueError): pass
+                    try:
+                        irf[key] = data["%s%d" % (key, count)]
+                    except KeyError:
+                        pass
+                try:
+                    irf["~#length"] = int(data["length%d" % count])
+                except (KeyError, TypeError, ValueError):
+                    pass
                 files.append(irf)
-        else: break
+        else:
+            break
         count += 1
 
     if warnings:
@@ -130,8 +141,9 @@ def ParsePLS(file):
             None, _("Unsupported file type"),
             _("Station lists can only contain locations of stations, "
               "not other station lists or playlists. The following locations "
-              "cannot be loaded:\n%s") % "\n  ".join(map(util.escape, warnings))
-            ).run()
+              "cannot be loaded:\n%s") %
+            "\n  ".join(map(util.escape, warnings))
+        ).run()
 
     return files
 
@@ -142,8 +154,10 @@ def ParseM3U(fileobj):
     for line in fileobj:
         line = line.strip()
         if line.startswith("#EXTINF:"):
-            try: pending_title = line.split(",", 1)[1]
-            except IndexError: pending_title = None
+            try:
+                pending_title = line.split(",", 1)[1]
+            except IndexError:
+                pending_title = None
         elif line.startswith("http"):
             irf = IRFile(line)
             if pending_title:
@@ -161,9 +175,11 @@ def add_station(uri):
         uri = uri.encode('utf-8')
 
     if uri.lower().endswith(".pls") or uri.lower().endswith(".m3u"):
-        try: sock = urllib.urlopen(uri)
+        try:
+            sock = urllib.urlopen(uri)
         except EnvironmentError, e:
-            try: err = e.strerror.decode(const.ENCODING, 'replace')
+            try:
+                err = e.strerror.decode(const.ENCODING, 'replace')
             except (TypeError, AttributeError):
                 err = e.strerror[1].decode(const.ENCODING, 'replace')
             qltk.ErrorMessage(None, _("Unable to add station"), err).run()
@@ -191,7 +207,8 @@ def download_taglist(callback, cofuncid, step=1024 * 10):
     an error."""
 
     with Task(_("Internet Radio"), _("Downloading station list")) as task:
-        if cofuncid: task.copool(cofuncid)
+        if cofuncid:
+            task.copool(cofuncid)
 
         try:
             response = urllib2.urlopen(STATION_LIST_URL)
@@ -212,8 +229,10 @@ def download_taglist(callback, cofuncid, step=1024 * 10):
         while temp or not data:
             read += len(temp)
 
-            if size: task.update(float(read) / size)
-            else: task.pulse()
+            if size:
+                task.update(float(read) / size)
+            else:
+                task.pulse()
             yield True
 
             try:
@@ -290,7 +309,7 @@ class AddNewStation(GetStringDialog):
             okbutton=gtk.STOCK_ADD)
 
     def _verify_clipboard(self, text):
-        # try to extract an URI from the clipboard
+        # try to extract a URI from the clipboard
         for line in text.splitlines():
             line = line.strip()
 
@@ -307,7 +326,8 @@ class GenreFilter(object):
 
     # This probably needs improvements
     GENRES = {
-        "electronic": (_("Electronic"),
+        "electronic": (
+            _("Electronic"),
             "|(electr,house,techno,trance,/trip.?hop/,&(drum,n,bass),chill,"
             "dnb,minimal,/down(beat|tempo)/,&(dub,step))"),
         "rap": (_("Hip Hop / Rap"), "|(&(hip,hop),rap)"),
@@ -315,7 +335,8 @@ class GenreFilter(object):
         "r&b": (_("R&B"), "/r(\&|n)b/"),
         "japanese": (_("Japanese"), "|(anime,jpop,japan,jrock)"),
         "indian": (_("Indian"), "|(bollywood,hindi,indian,bhangra)"),
-        "religious": (_("Religious"),
+        "religious": (
+            _("Religious"),
             "|(religious,christian,bible,gospel,spiritual,islam)"),
         "charts": (_("Charts"), "|(charts,hits,top)"),
         "turkish": (_("Turkish"), "|(turkish,turkce)"),
@@ -339,7 +360,8 @@ class GenreFilter(object):
         "lounge": (_("Lounge"), None),
         "punk": (_("Punk"), None),
         "reggaeton": (_("Reggaeton"), None),
-        "slavic": (_("Slavic"),
+        "slavic": (
+            _("Slavic"),
             "|(narodna,albanian,manele,shqip,kosova)"),
         "greek": (_("Greek"), None),
         "gothic": (_("Gothic"), None),
@@ -388,10 +410,10 @@ class InternetRadio(gtk.VBox, Browser, util.InstanceTracker):
         klass.__librarian = library.librarian
 
         klass.__stations = SongLibrary("iradio-remote")
-        klass.__stations.load(STATIONS_ALL, skip=lambda x: True)
+        klass.__stations.load(STATIONS_ALL)
 
         klass.__fav_stations = SongLibrary("iradio")
-        klass.__fav_stations.load(STATIONS_FAV, skip=lambda x: True)
+        klass.__fav_stations.load(STATIONS_FAV)
 
         klass.filters = GenreFilter()
 
@@ -437,7 +459,7 @@ class InternetRadio(gtk.VBox, Browser, util.InstanceTracker):
         gobject_weak(search.connect, 'query-changed', self.__filter_changed)
 
         menu = gtk.Menu()
-        new_item = MenuItem(_("_New Station"), gtk.STOCK_ADD)
+        new_item = MenuItem(_("_New Station..."), gtk.STOCK_ADD)
         gobject_weak(new_item.connect, 'activate', self.__add)
         menu.append(new_item)
         update_item = MenuItem(_("_Update Stations"), gtk.STOCK_REFRESH)
@@ -448,7 +470,7 @@ class InternetRadio(gtk.VBox, Browser, util.InstanceTracker):
         button = MenuButton(
             gtk.image_new_from_stock(
                 gtk.STOCK_PREFERENCES, gtk.ICON_SIZE_MENU),
-                arrow=True)
+            arrow=True)
         button.set_menu(menu)
 
         def focus(widget, *args):
@@ -506,8 +528,11 @@ class InternetRadio(gtk.VBox, Browser, util.InstanceTracker):
         # selection
         selection = view.get_selection()
         selection.set_mode(gtk.SELECTION_MULTIPLE)
-        self.__changed_sig = gobject_weak(selection.connect, 'changed',
-            util.DeferredSignal(lambda x: self.activate()), parent=view)
+        self.__changed_sig = gobject_weak(
+            selection.connect,
+            'changed',
+            util.DeferredSignal(lambda x: self.activate()),
+            parent=view)
 
         box = gtk.HBox(spacing=6)
         box.pack_start(search)
@@ -707,6 +732,7 @@ class InternetRadio(gtk.VBox, Browser, util.InstanceTracker):
             self.__filter_changed(self.__searchbar, text, restore=True)
 
         keys = config.get("browsers", "radio").splitlines()
+
         def select_func(row):
             return row[self.TYPE] != self.TYPE_SEP and row[self.KEY] in keys
 
@@ -786,7 +812,8 @@ class InternetRadio(gtk.VBox, Browser, util.InstanceTracker):
         return ngettext("%(count)d station", "%(count)d stations", i)
 
 
-from quodlibet import player
-if player.can_play_uri("http://"):
+from quodlibet import app
+if not app.player or app.player.can_play_uri("http://"):
     browsers = [InternetRadio]
-else: browsers = []
+else:
+    browsers = []

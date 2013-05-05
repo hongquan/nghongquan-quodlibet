@@ -4,6 +4,7 @@
 # it under the terms of the GNU General Public License version 2 as
 # published by the Free Software Foundation
 
+import unittest
 from tests import TestCase, add
 
 from quodlibet import config
@@ -91,7 +92,7 @@ class TCollectionAlbums(TestCase):
         albums = StoreUtils.get_albums_for_iter(model, model.get_iter(path))
         self.failUnless(a[0] in albums)
 
-        x = StoreUtils.get_album(model, model.get_iter_root())
+        x = StoreUtils.get_album(model, model.get_iter_first())
         self.failIf(x)
         x = StoreUtils.get_album(model, model.get_iter(path))
         self.failUnlessEqual(x, a[0])

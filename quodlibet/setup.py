@@ -21,7 +21,7 @@ from gdist import GDistribution
 from gdist.clean import clean as gdist_clean
 
 PACKAGES = ("browsers devices formats library parse plugins qltk "
-            "util player browsers.albums util.string").split()
+            "util player browsers.albums browsers.paned util.string").split()
 
 # TODO: link this better to the app definitions
 MIN_PYTHON_VER = (2, 6)
@@ -223,11 +223,11 @@ class coverage_cmd(Command):
         coverage = os.path.join(os.path.dirname(__file__), "coverage")
         results.write_results(show_missing=True, coverdir=coverage)
 
-        #~ map(os.unlink, glob.glob(os.path.join(coverage, "[!q]*.cover")))
-        #~ try:
-            #~ os.unlink(os.path.join(coverage, "..setup.cover"))
-        #~ except OSError:
-            #~ pass
+        map(os.unlink, glob.glob(os.path.join(coverage, "[!q]*.cover")))
+        try:
+            os.unlink(os.path.join(coverage, "..setup.cover"))
+        except OSError:
+            pass
 
         # compute coverage
         stats = []

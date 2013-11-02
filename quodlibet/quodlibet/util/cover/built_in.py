@@ -27,8 +27,9 @@ class EmbedCover(CoverSourcePlugin):
 
     @property
     def cover(self):
-        if "~picture" in self.song:
-            return self.song.get_format_cover()
+        if self.song.has_images:
+            image = self.song.get_primary_image()
+            return image.file if image else None
 
 
 class FilesystemCover(CoverSourcePlugin):

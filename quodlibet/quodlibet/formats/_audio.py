@@ -15,6 +15,8 @@ import shutil
 import time
 import re
 
+from ._image import ImageContainer
+
 from quodlibet import const
 from quodlibet import util
 from quodlibet import config
@@ -60,7 +62,7 @@ FILESYSTEM_TAGS = "~filename ~basename ~dirname".split()
 UNIQUE_ALBUM_IDENTIFIERS = ["musicbrainz_albumid", "labelid"]
 
 
-class AudioFile(dict):
+class AudioFile(dict, ImageContainer):
     """An audio file. It looks like a dict, but implements synthetic
     and tied tags via __call__ rather than __getitem__. This means
     __getitem__, get, and so on can be used for efficiency.

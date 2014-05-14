@@ -8,7 +8,6 @@
 # published by the Free Software Foundation
 
 import os
-
 if os.name == "nt":
     from quodlibet.plugins import PluginNotSupportedError
     raise PluginNotSupportedError
@@ -18,9 +17,7 @@ try:
     from pyinotify import Notifier, ThreadedNotifier
 except ImportError as e:
     from quodlibet import plugins
-    raise (plugins.MissingGstreamerElementPluginException("pyinotify")
-           if hasattr(plugins, "MissingPluginDependencyException")
-           else e)
+    raise plugins.MissingModulePluginException("pyinotify")
 
 
 from quodlibet import print_d
@@ -28,11 +25,10 @@ from quodlibet.plugins.events import EventPlugin
 from quodlibet.util.library import get_scan_dirs
 from quodlibet import app
 from gi.repository import GLib
-import os
 
 
 class LibraryEvent(ProcessEvent):
-    """pynotify event handler for library changes"""
+    """pyinotify event handler for library changes"""
 
     # Slightly dodgy state mechanism for updates
     _being_created = set()
@@ -120,10 +116,13 @@ class AutoLibraryUpdate(EventPlugin):
     PLUGIN_ID = "Automatic library update"
     PLUGIN_DESC = _("Keep your library up to date with inotify. "
                     "Requires %s.") % "pyinotify"
-    PLUGIN_VERSION = "0.3"
+    PLUGIN_VERSION = "0.4"
 
     # TODO: make a config option
     USE_THREADS = True
+
+    FLAGS = ['IN_DELETE', 'IN_CLOSE_WRITE',  # 'IN_MODIFY',
+             'IN_MOVED_FROM', 'IN_MOVED_TO', 'IN_CREATE']
 
     event_handler = None
     running = False
@@ -135,10 +134,9 @@ class AutoLibraryUpdate(EventPlugin):
 
             # Choose event types to watch for
             # FIXME: watch for IN_CREATE or for some reason folder copies
-            # are missed,  --nickb
-            FLAGS = ['IN_DELETE', 'IN_CLOSE_WRITE',# 'IN_MODIFY',
-                     'IN_MOVED_FROM', 'IN_MOVED_TO', 'IN_CREATE']
-            mask = reduce(lambda x, s: x | EventsCodes.ALL_FLAGS[s], FLAGS, 0)
+            # are missed,  --NickB
+            mask = reduce(lambda x, s: x | EventsCodes.ALL_FLAGS[s],
+                          self.FLAGS, 0)
 
             if self.USE_THREADS:
                 print_d("Using threaded notifier")
@@ -151,17 +149,19 @@ class AutoLibraryUpdate(EventPlugin):
                 GLib.timeout_add(1000, self.unthreaded_callback)
 
             for path in get_scan_dirs():
-                print_d('Watching directory %s for %s' % (path, FLAGS))
+                print_d('Watching directory %s for %s' % (path, self.FLAGS))
                 # See https://github.com/seb-m/pyinotify/wiki/
                 # Frequently-Asked-Questions
                 wm.add_watch(path, mask, rec=True, auto_add=True)
 
             self.running = True
+        else:
+            print_d("Already running")
 
     def unthreaded_callback(self):
         """Processes as much of the inotify events as allowed"""
         assert self.notifier._timeout is not None, \
-                'Notifier must be constructed with a [short] timeout'
+            'Notifier must be constructed with a [short] timeout'
         self.notifier.process_events()
         # loop in case more events appear while we are processing
         while self.notifier.check_events():
@@ -169,8 +169,8 @@ class AutoLibraryUpdate(EventPlugin):
         self.notifier.process_events()
         return True
 
-    # disable hook, stop the notifier:
     def disabled(self):
+        """Disable hook that stops the notifier"""
         if self.running:
             self.running = False
         if self.notifier:

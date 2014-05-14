@@ -1,5 +1,5 @@
 # Copyright 2004-2008 Joe Wreschnig
-#           2009-2013 Nick Boultbee
+#           2009-2014 Nick Boultbee
 #           2011-2014 Christoph Reiter
 #
 # This program is free software; you can redistribute it and/or modify
@@ -36,6 +36,8 @@ INITIAL = {
     "library": {
         "exclude": "",
         "refresh_on_start": "true",
+        # use native Gio directory-watching to auto-update libraries
+        "auto_update": "true",
     },
     # State about the player, to restore on startup
     "memory": {
@@ -110,6 +112,7 @@ INITIAL = {
 
         # search as soon as text is typed into search box
         "eager_search": "true",
+
     },
     "rename": {
         "spaces": "false",

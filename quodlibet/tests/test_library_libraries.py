@@ -1,11 +1,9 @@
 from gi.repository import Gtk
+import time
 
-import os
-import shutil
-from quodlibet import config
 from quodlibet.formats._audio import AudioFile
 
-from tests import TestCase, DATA_DIR, mkstemp
+from tests import TestCase, DATA_DIR, mkstemp, mkdtemp
 from helper import capture_output
 
 from quodlibet.library.libraries import *
@@ -68,6 +66,132 @@ class FakeSongFile(FakeSong):
     def mounted(self):
         return self._mounted
 
+
+class FakeSongFileResource(FakeSongFile):
+    """It's  almost real, living on disk
+    Implements Resource"""
+
+    EXT = '.ext'
+
+    def __new__(cls, name, dir=None):
+        """Retain `FakeSongFile` (i.e. `int`) compatibility"""
+        return FakeSongFile.__new__(cls, name)
+
+    def __init__(self, name, dir=None):
+        super(FakeSongFileResource, self).__init__(name)
+        self.__set_path(name, dir)
+
+    @classmethod
+    def from_filename(cls, path):
+        filename = os.path.basename(path).split('.')[0]
+        fake = cls(int(filename), dir=os.path.dirname(path))
+        return fake
+
+    def exists(self):
+        # Hack reality into the exists() call,
+        # so that file-watching works for deletions
+        if not self._dirname:
+            return self._exists
+        return os.path.exists(self.fn)
+
+    @property
+    def key(self):
+        return self.fn
+
+    @key.setter
+    def key(self, value):
+        self.fn = value
+
+    def rename(self, new_name):
+        old = self.fn
+        self.__set_path(new_name, self._dirname)
+        print_d("Renaming %s to %s" % (old, self.fn))
+        os.rename(old, self.fn)
+
+    def __set_path(self, new_name, dir):
+        self._dirname = dir or ''
+        self.fn = os.path.join(self._dirname, str(new_name) + self.EXT)
+
+    def write(self):
+        f = open(self.fn, 'w')
+        try:
+            f.write("TEST")
+        except:
+            print_w("Couldn't write to %s" % self.fn)
+        finally:
+            f.close()
+
+    def __enter__(self):
+        self.write()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            os.unlink(self.fn)
+        except Exception as e:
+            print_w("Couldn't delete %s (%s)" % (self.fn, e))
+            raise e
+        print_d("Removed %s" % self.fn)
+
+
+class FakeAudioFileResource(AudioFile):
+    """It's almost a real AudioFile, living on disk, that's a Resource"""
+
+    EXT = '.ext'
+
+    def __init__(self, fn, title=None):
+        fn = str(fn)
+        if title:
+            self['title'] = title
+        self["~dirname"] = os.path.dirname(fn)
+        self.sanitize(fn)
+
+    @property
+    def key(self):
+        return self["~filename"]
+
+    @key.setter
+    def key(self, value):
+        self["~filename"] = value
+
+    @staticmethod
+    def new(temp_dir, title=None):
+        """Create a new instance, the lazy way"""
+        title = title or "A Title"
+        fn = os.path.join(temp_dir, title + FakeAudioFileResource.EXT)
+        return FakeAudioFileResource(fn, title=title)
+
+    @property
+    def fn(self):
+        return self["~filename"]
+
+    def rename(self, new_name=None):
+        new_name = new_name or "dummy"
+        new_path = os.path.join(self["~dirname"], new_name + self.EXT)
+        os.rename(self['~filename'], new_path)
+        self["~filename"] = new_path
+        #self.sanitize()
+
+    def write(self):
+        f = open(self.fn, 'w')
+        try:
+            f.write("TEST")
+        except:
+            print_w("Couldn't write to %s" % self.fn)
+        finally:
+            f.close()
+
+    def __enter__(self):
+        self.write()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            os.unlink(self.fn)
+        except Exception as e:
+            print_w("Couldn't delete %s (%s)" % (self.fn, e))
+            raise e
+        print_d("Removed %s" % self.fn)
 
 # Custom range functions, to generate lists of song-like objects
 def FSFrange(*args):
@@ -157,7 +281,7 @@ class TLibrary(TestCase):
         new = self.Fake(12)
         new.key = 100
         self.library.add([new])
-        self.failUnlessEqual(self.library[100], 12)
+        self.failUnlessEqual(self.library[100], new)
         self.failIf(12 in self.library)
 
     def test___getitem___not_present(self):
@@ -173,7 +297,7 @@ class TLibrary(TestCase):
             # 0, 1, 2, 6, 9: all added by self.Frange
             # 100: key for new
             # new: is itself present
-            self.failUnless(value in self.library, "didn't find %d" % value)
+            self.failUnless(value in self.library, "didn't find %s" % value)
 
         for value in [-1, 10, 12, 101]:
             # -1, 10, 101: boundry values
@@ -370,9 +494,92 @@ class TFileLibrary(TLibrary):
         changed = set()
         removed = set()
         self.library.reload(new, changed=changed, removed=removed)
-        self.assertTrue(new in changed)
+        self.assertTrue(new in changed, msg="%s not in %s" % (new, changed))
         self.assertFalse(removed)
 
+
+class TWatchedFileLibrary(TFileLibrary):
+    Library = WatchedFileLibrary
+    Fake = FakeSongFileResource
+    Frange = staticmethod(FSFrange)
+    TIMEOUT = 3
+
+    def setUp(self):
+        super(TWatchedFileLibrary, self).setUp()
+        config.init()
+        config.set("library", "auto_update", "true")
+
+    def tearDown(self):
+        super(TWatchedFileLibrary, self).tearDown()
+        config.quit()
+        const.DEBUG = False
+
+    def _stub_add_filename(self, filename, add=True):
+        if filename not in self.library._contents:
+            song = self.Fake.from_filename(filename)
+            if song and add:
+                self.library.add([song])
+        else:
+            print_d("Already got file %r." % filename)
+            song = self.library._contents[filename]
+        return song
+
+    def test_monitor_dir(self):
+        const.DEBUG = True
+        try:
+            self.root = mkdtemp()
+            # Stub the implementation to test WatchedFileLibrary directly
+            self.library.add_filename = self._stub_add_filename
+
+            # Start the monitoring directly
+            self.library.monitor_dir(self.root)
+
+            # Set up a resource
+            song = FakeSongFileResource(123, self.root)
+            with song:
+                self.failUnless(song)
+                wait_for(lambda lib: len(lib), self.library)
+                # Should now appear in the library
+                self.failUnless(song in self.library,
+                                msg="%s didn't get auto-added" % song.fn)
+
+                # Try a file move too
+                song.rename(234)
+                # Just to be sure it moved...
+                self.failUnless('234' in song.fn)
+
+                wait_for(lambda _: False, self.library)
+                # Should still be there
+                self.failUnless(song in self.library,
+                                msg="%s disappeared" % song)
+                lib_song = self.library[song.key]
+                self.failUnlessEqual(lib_song.fn, song.fn)
+                self.failUnlessEqual(len(self.library), 1,
+                        msg=("Library shouldn't have grown (%d - %s) after "
+                             "rename"
+                             % (len(self.library), self.library._contents)))
+
+            # After deletion it should be removed from the library
+            print_d("Checking for removal...")
+            wait_for(lambda lib: len(lib) == 0, self.library)
+            self.failIf(self.library,
+                        msg="%s didn't get auto-removed" % song.fn)
+        except Exception as e:
+            raise
+        finally:
+            if self.root:
+                os.rmdir(self.root)
+
+
+def wait_for(func, *args, **kwargs):
+    """ Waits for `func` to be True, or for a timeout of roughly `timeout`
+    seconds (or 3 if none specified), executing GTK loops meanwhile.
+    """
+    t = time.time()
+    timeout = kwargs.get("timeout", 3)
+    while not func(*args, **kwargs) and time.time() - t < timeout:
+        Gtk.main_iteration_do(False)
+        
 
 class TSongFileLibrary(TSongLibrary):
     Fake = FakeSongFile

@@ -453,6 +453,10 @@ class FileSelector(Gtk.VPaned):
         filelist.set_rules_hint(True)
         filelist.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
         filelist.set_search_equal_func(search_func, False)
+        # Allow to drag and drop files from outside
+        filelist.enable_model_drag_dest([], Gdk.DragAction.COPY)
+        filelist.drag_dest_add_uri_targets()
+        filelist.connect('drag-data-received', self.__file_dropped)
 
         self.__sig = filelist.get_selection().connect(
             'changed', self.__changed)
@@ -533,6 +537,14 @@ class FileSelector(Gtk.VPaned):
 
         fselect.handler_unblock(self.__sig)
         fselect.emit('changed')
+
+    def __file_dropped(self, widget, drag_context,
+                       x, y, data, info, time):
+        uris = data.get_uris()
+        # Convert URI to normal path
+        filepath = urlparse.urlsplit(uris[0]).path
+        filepath = urlparse.unquote(filepath)
+        self.go_to(filepath)
 
 
 def _get_main_folders():
